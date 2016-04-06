@@ -1,0 +1,1516 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Helly的技术博客</title>
+  <subtitle>纸上得来终觉浅，绝知此事要躬行。</subtitle>
+  <link href="/atom.xml" rel="self"/>
+  
+  <link href="http://helly1024.github.io/"/>
+  <updated>2016-04-05T07:44:23.000Z</updated>
+  <id>http://helly1024.github.io/</id>
+  
+  <author>
+    <name>Helly</name>
+    <email>lnwxzby@gmail.com</email>
+  </author>
+  
+  <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>AutoreleasePool的原理和实现</title>
+    <link href="http://helly1024.github.io/2016/04/05/AutoreleasePool%E7%9A%84%E5%8E%9F%E7%90%86%E5%92%8C%E5%AE%9E%E7%8E%B0/"/>
+    <id>http://helly1024.github.io/2016/04/05/AutoreleasePool的原理和实现/</id>
+    <published>2016-04-05T07:40:02.000Z</published>
+    <updated>2016-04-05T07:44:23.000Z</updated>
+    
+    <content type="html">&lt;h2 id=&quot;一、AutoreleasePool是什么&quot;&gt;&lt;a href=&quot;#一、AutoreleasePool是什么&quot; class=&quot;headerlink&quot; title=&quot;一、AutoreleasePool是什么&quot;&gt;&lt;/a&gt;一、AutoreleasePool是什么&lt;/h2&gt;&lt;p&gt;AutoreleasePool（自动释放池）是OC中的一种内存自动回收机制，它可以延迟加入AutoreleasePool中的变量release的时机。在正常情况下，创建的变量会在超出其作用域的时候release，但是如果将变量加入AutoreleasePool，那么release将延迟执行。&lt;br&gt;看到这里有人可能会问，那到底延迟到什么时候执行呢？看完本文后，各位心中自然会有答案。&lt;/p&gt;
+&lt;p&gt;让我们写个Demo来验证一下：&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;11&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;12&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;13&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;14&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;15&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;16&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;17&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;18&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;19&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;20&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;21&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;22&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;23&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;24&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;25&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;26&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;27&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;28&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;29&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;30&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;31&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;32&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;33&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;meta&quot;&gt;#import &lt;span class=&quot;meta-string&quot;&gt;&amp;lt;Foundation/Foundation.h&amp;gt;&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;comment&quot;&gt;// 生成两个全局weak变量用来观察实验对象&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;__&lt;span class=&quot;keyword&quot;&gt;weak&lt;/span&gt; &lt;span class=&quot;built_in&quot;&gt;NSString&lt;/span&gt; *weak_String;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;__&lt;span class=&quot;keyword&quot;&gt;weak&lt;/span&gt; &lt;span class=&quot;built_in&quot;&gt;NSString&lt;/span&gt; *weak_StringAutorelease;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; createString(&lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt;) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;built_in&quot;&gt;NSString&lt;/span&gt; *string = [[&lt;span class=&quot;built_in&quot;&gt;NSString&lt;/span&gt; alloc] initWithFormat:&lt;span class=&quot;string&quot;&gt;@&quot;Hello, World!&quot;&lt;/span&gt;];    &lt;span class=&quot;comment&quot;&gt;// 创建常规对象&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;built_in&quot;&gt;NSString&lt;/span&gt; *stringAutorelease = [&lt;span class=&quot;built_in&quot;&gt;NSString&lt;/span&gt; stringWithFormat:&lt;span class=&quot;string&quot;&gt;@&quot;Hello, World! Autorelease&quot;&lt;/span&gt;]; &lt;span class=&quot;comment&quot;&gt;// 创建autorelease对象&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    weak_String = string;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    weak_StringAutorelease = stringAutorelease;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;------in the createString()------&quot;&lt;/span&gt;);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;%@&quot;&lt;/span&gt;, weak_String);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;%@\n\n&quot;&lt;/span&gt;, weak_StringAutorelease);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;int&lt;/span&gt; main(&lt;span class=&quot;keyword&quot;&gt;int&lt;/span&gt; argc, &lt;span class=&quot;keyword&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;char&lt;/span&gt; * argv[]) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;@autoreleasepool&lt;/span&gt; &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        createString();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;------in the autoreleasepool------&quot;&lt;/span&gt;);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;%@&quot;&lt;/span&gt;, weak_String);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;%@\n\n&quot;&lt;/span&gt;, weak_StringAutorelease);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;------in the main()------&quot;&lt;/span&gt;);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;%@&quot;&lt;/span&gt;, weak_String);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;%@&quot;&lt;/span&gt;, weak_StringAutorelease);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt; &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;上述代码运行结果如下：&lt;/p&gt;
+&lt;figure class=&quot;highlight plain&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;11&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;12&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;2016-04-01 16:21:46.961 AutoreleasePool[18401:708414] ------in the createString()------&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2016-04-01 16:21:46.962 AutoreleasePool[18401:708414] Hello, World!&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2016-04-01 16:21:46.962 AutoreleasePool[18401:708414] Hello, World! Autorelease&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2016-04-01 16:21:46.962 AutoreleasePool[18401:708414] ------in the autoreleasepool------&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2016-04-01 16:21:46.962 AutoreleasePool[18401:708414] (null)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2016-04-01 16:21:46.962 AutoreleasePool[18401:708414] Hello, World! Autorelease&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2016-04-01 16:21:46.962 AutoreleasePool[18401:708414] ------in the main()------&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2016-04-01 16:21:46.962 AutoreleasePool[18401:708414] (null)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2016-04-01 16:21:46.962 AutoreleasePool[18401:708414] (null)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;Program ended with exit code: 0&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;首先在createString函数中创建了一个常规NSString对象和一个autorelease对象，然后分别赋值给两个weak全局变量用于观察目标对象。通过两个weak全局变量的打印结果我们可以看到，在&lt;code&gt;createString&lt;/code&gt;函数中两个对象都是正常存在的，出&lt;code&gt;了createString&lt;/code&gt;函数在autoreleasepool中，常规对象已经被释放，而autorelease对象依然存在。在autoreleasepool外，autorelease对象也被释放了。&lt;/p&gt;
+&lt;p&gt;通过运行结果，我们已经直观的了解了AutoreleasePool的作用，那么AutoreleasePool是如何实现的呢？&lt;/p&gt;
+&lt;h2 id=&quot;二、AutoreleasePool的实现&quot;&gt;&lt;a href=&quot;#二、AutoreleasePool的实现&quot; class=&quot;headerlink&quot; title=&quot;二、AutoreleasePool的实现&quot;&gt;&lt;/a&gt;二、AutoreleasePool的实现&lt;/h2&gt;&lt;p&gt;接下来我们将一步步探寻AutoreleasePool的底层实现：&lt;br&gt;首先我们调整上面的代码，只留下main函数和@autoreleasepool{}。&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;meta&quot;&gt;#import &lt;span class=&quot;meta-string&quot;&gt;&amp;lt;Foundation/Foundation.h&amp;gt;&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;int&lt;/span&gt; main(&lt;span class=&quot;keyword&quot;&gt;int&lt;/span&gt; argc, &lt;span class=&quot;keyword&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;char&lt;/span&gt; * argv[]) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;@autoreleasepool&lt;/span&gt; &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;(&lt;span class=&quot;string&quot;&gt;@&quot;Hello, World!&quot;&lt;/span&gt;);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt; &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;然后在终端中使用&lt;code&gt;clang -rewrite-objc&lt;/code&gt;命令将上述OC代码重写成C++的实现。&lt;br&gt;搜索main我们可以看到main函数的实现重写成了如下代码：&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;int&lt;/span&gt; main(&lt;span class=&quot;keyword&quot;&gt;int&lt;/span&gt; argc, &lt;span class=&quot;keyword&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;char&lt;/span&gt; * argv[]) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;comment&quot;&gt;/* @autoreleasepool */&lt;/span&gt; &amp;#123; __AtAutoreleasePool __autoreleasepool; &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;((&lt;span class=&quot;built_in&quot;&gt;NSString&lt;/span&gt; *)&amp;amp;__&lt;span class=&quot;built_in&quot;&gt;NSConstantStringImpl__var_folders_kb_06b822gn59df4d1zt99361xw0000gn_T_main_d39a79_mi_0&lt;/span&gt;);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;通过对比可以发现，苹果通过声明一个&lt;code&gt;__AtAutoreleasePool&lt;/code&gt;类型的局部变量&lt;code&gt;__autoreleasepool&lt;/code&gt;实现了&lt;code&gt;@autoreleasepool{}&lt;/code&gt;。那么这一切是如何实现的呢？这就要看看&lt;code&gt;__AtAutoreleasePool&lt;/code&gt;的定义了：&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;extern&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;&quot;C&quot;&lt;/span&gt; __declspec(dllimport) &lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; * objc_autoreleasePoolPush(&lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt;);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;extern&lt;/span&gt; &lt;span class=&quot;string&quot;&gt;&quot;C&quot;&lt;/span&gt; __declspec(dllimport) &lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; objc_autoreleasePoolPop(&lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; *);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;struct&lt;/span&gt; __AtAutoreleasePool &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;  __AtAutoreleasePool() &amp;#123;atautoreleasepoolobj = objc_autoreleasePoolPush();&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;  ~__AtAutoreleasePool() &amp;#123;objc_autoreleasePoolPop(atautoreleasepoolobj);&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;  &lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; * atautoreleasepoolobj;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;根据构造函数和析构函数的特点（自动局部变量的构造函数是在程序执行到声明这个对象的位置时调用的，而对应的析构函数是在程序执行到离开这个对象的作用域时调用），我们可以将上面两段代码简化成如下形式：&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;int&lt;/span&gt; main(&lt;span class=&quot;keyword&quot;&gt;int&lt;/span&gt; argc, &lt;span class=&quot;keyword&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;char&lt;/span&gt; * argv[]) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;comment&quot;&gt;/* @autoreleasepool */&lt;/span&gt; &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; *atautoreleasepoolobj = objc_autoreleasePoolPush();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;built_in&quot;&gt;NSLog&lt;/span&gt;((&lt;span class=&quot;built_in&quot;&gt;NSString&lt;/span&gt; *)&amp;amp;__&lt;span class=&quot;built_in&quot;&gt;NSConstantStringImpl__var_folders_kb_06b822gn59df4d1zt99361xw0000gn_T_main_d39a79_mi_0&lt;/span&gt;);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        objc_autoreleasePoolPop(atautoreleasepoolobj);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;number&quot;&gt;0&lt;/span&gt;;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;至此，我们可以分析出，单个自动释放池的执行过程就是&lt;code&gt;objc_autoreleasePoolPush()&lt;/code&gt; —&amp;gt; &lt;code&gt;[object autorelease]&lt;/code&gt; —&amp;gt; &lt;code&gt;objc_autoreleasePoolPop(void *)&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;看到这两个函数的前缀，我们就知道它们是runtime中的两个函数，接下来我们就打开runtime的源码，看看它们是如何实现的。文中使用的源码是&lt;a href=&quot;http://opensource.apple.com/tarballs/objc4/objc4-680.tar.gz&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;objc4-680.tar.gz&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id=&quot;三、AutoreleasePool源码解析&quot;&gt;&lt;a href=&quot;#三、AutoreleasePool源码解析&quot; class=&quot;headerlink&quot; title=&quot;三、AutoreleasePool源码解析&quot;&gt;&lt;/a&gt;三、AutoreleasePool源码解析&lt;/h2&gt;&lt;p&gt;在runtime项目中搜索&lt;code&gt;objc_autoreleasePoolPush&lt;/code&gt;我们可以在objc/Source/NSObject.mm中的1749~1754行找到&lt;code&gt;objc_autoreleasePoolPush()&lt;/code&gt;函数的实现：&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; *&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;objc_autoreleasePoolPush(&lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt;)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (UseGC) &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;literal&quot;&gt;nil&lt;/span&gt;;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; AutoreleasePoolPage::push();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;同样我们可以找到&lt;code&gt;objc_autoreleasePoolPop()&lt;/code&gt;函数的实现：&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;objc_autoreleasePoolPop(&lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; *ctxt)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (UseGC) &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt;;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    AutoreleasePoolPage::pop(ctxt);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;看到这里，我们发现这两个函数的实现都是调用了&lt;code&gt;AutoreleasePoolPage&lt;/code&gt;类中的方法。于是我们可以断定，AutoreleasePool的是通过&lt;code&gt;AutoreleasePoolPage&lt;/code&gt;类来实现的。&lt;/p&gt;
+&lt;p&gt;打开&lt;code&gt;AutoreleasePoolPage&lt;/code&gt;的定义我们可以看到它有下列属性：&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;magic_t &lt;span class=&quot;keyword&quot;&gt;const&lt;/span&gt; magic;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; *next;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;pthread_t &lt;span class=&quot;keyword&quot;&gt;const&lt;/span&gt; thread;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;AutoreleasePoolPage * &lt;span class=&quot;keyword&quot;&gt;const&lt;/span&gt; parent;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;AutoreleasePoolPage *child;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;uint32_t &lt;span class=&quot;keyword&quot;&gt;const&lt;/span&gt; depth;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;uint32_t hiwat;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;通过这些属性，我们可以推断出，这是一个双向链表的节点，AutoreleasePool的内存结构就是一个双向链表。而源码上的注释也证实我们的推测：&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;11&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;12&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;13&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;comment&quot;&gt;/***********************************************************************&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;   Autorelease pool implementation&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;   A thread&#39;s autorelease pool is a stack of pointers. &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;   Each pointer is either an object to release, or POOL_SENTINEL which is &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     an autorelease pool boundary.&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;   A pool token is a pointer to the POOL_SENTINEL for that pool. When &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     the pool is popped, every object hotter than the sentinel is released.&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;   The stack is divided into a doubly-linked list of pages. Pages are added &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     and deleted as necessary. &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;   Thread-local storage points to the hot page, where newly autoreleased &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     objects are stored. &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;**********************************************************************/&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;一个线程的autoreleasepool就是一个指针栈。&lt;br&gt;栈中存放的指针指向加入需要release的对象或者&lt;code&gt;POOL_SENTINEL&lt;/code&gt;（哨兵对象，用于分隔autoreleasepool）。&lt;br&gt;栈中指向&lt;code&gt;POOL_SENTINEL&lt;/code&gt;的指针就是autoreleasepool的一个标记。当autoreleasepool进行出栈操作，每一个比这个哨兵对象后进栈的对象都会release。&lt;br&gt;这个栈是由一个以page为节点双向链表组成，page根据需求进行增减。&lt;br&gt;autoreleasepool对应的线程存储了指向最新page（也就是最新添加autorelease对象的page）的指针。&lt;/p&gt;
+&lt;p&gt;通过阅读源码，我们可以分析出上述属性的作用：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;magic&lt;/code&gt;：用来校验 AutoreleasePoolPage 的结构是否完整；&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;next&lt;/code&gt;：指向栈顶，也就是最新入栈的autorelease对象的下一个位置；&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;thread&lt;/code&gt;：指向当前线程；&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;parent&lt;/code&gt;：指向父节点&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;child&lt;/code&gt;：指向子节点&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;depth&lt;/code&gt;：表示链表的深度，也就是链表节点的个数&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;hiwat&lt;/code&gt;：表示high water mark（最高水位标记）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;接下来我们看看实现AutoreleasePool的几个关键函数是如何实现的。为了方便起见，就直接将注释添加在代码中。&lt;/p&gt;
+&lt;h3 id=&quot;AutoreleasePoolPage-push&quot;&gt;&lt;a href=&quot;#AutoreleasePoolPage-push&quot; class=&quot;headerlink&quot; title=&quot;AutoreleasePoolPage::push()&quot;&gt;&lt;/a&gt;&lt;code&gt;AutoreleasePoolPage::push()&lt;/code&gt;&lt;/h3&gt;&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;11&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;12&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;13&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;inline&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; *push() &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt; &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     &lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; *dest;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (DebugPoolAllocation) &amp;#123;    &lt;span class=&quot;comment&quot;&gt;// 区别调试模式&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;         &lt;span class=&quot;comment&quot;&gt;// Each autorelease pool starts on a new pool page.&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;         &lt;span class=&quot;comment&quot;&gt;// 调试模式下将新建一个链表节点，并将一个哨兵对象添加到链表栈中&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;         dest = autoreleaseNewPage(POOL_SENTINEL);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     &amp;#125; &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt; &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;         dest = autoreleaseFast(POOL_SENTINEL);    &lt;span class=&quot;comment&quot;&gt;// 添加一个哨兵对象到自动释放池的链表栈中&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     assert(*dest == POOL_SENTINEL);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;     &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; dest;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt; &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;11&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;inline&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; *autoreleaseFast(&lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; obj)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    AutoreleasePoolPage *page = hotPage();    &lt;span class=&quot;comment&quot;&gt;// 获取最新的page（即链表上最新的节点）&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (page &amp;amp;&amp;amp; !page-&amp;gt;full()) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; page-&amp;gt;add(obj);    &lt;span class=&quot;comment&quot;&gt;// 在这个page存在且不满的情况下，直接将需要autorelease的对象加入栈中&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125; &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (page) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; autoreleaseFullPage(obj, page);    &lt;span class=&quot;comment&quot;&gt;// 在这个page已经满了的情况下，新建一个page并将obj对象放入新的page（即入栈）&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125; &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt; &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; autoreleaseNoPage(obj);    &lt;span class=&quot;comment&quot;&gt;// 在没有page的情况下，新建一个page并将obj对象放入新的page（即入栈）&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;&lt;code&gt;autoreleaseFullPage(obj, page)&lt;/code&gt;和&lt;code&gt;autoreleaseNoPage(obj)&lt;/code&gt;的区别在于&lt;code&gt;autoreleaseFullPage(obj, page)&lt;/code&gt;会将当前page的child指向新建的page，而&lt;code&gt;autoreleaseNoPage(obj)&lt;/code&gt;会在新建的page中先入栈一个&lt;code&gt;POOL_SENTINEL&lt;/code&gt;（哨兵对象），再将obj入栈。&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; *add(&lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; obj)   &lt;span class=&quot;comment&quot;&gt;// 入栈操作&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    assert(!full());&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    unprotect();    &lt;span class=&quot;comment&quot;&gt;// 解除保护&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; *ret = next;  &lt;span class=&quot;comment&quot;&gt;// faster than `return next-1` because of aliasing&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    *next++ = obj;    &lt;span class=&quot;comment&quot;&gt;// 将obj入栈到栈顶并重新定位栈顶&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    protect();    &lt;span class=&quot;comment&quot;&gt;// 添加保护&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; ret;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;h3 id=&quot;AutoreleasePoolPage-pop-ctxt&quot;&gt;&lt;a href=&quot;#AutoreleasePoolPage-pop-ctxt&quot; class=&quot;headerlink&quot; title=&quot;AutoreleasePoolPage::pop(ctxt);&quot;&gt;&lt;/a&gt;&lt;code&gt;AutoreleasePoolPage::pop(ctxt);&lt;/code&gt;&lt;/h3&gt;&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;11&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;12&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;13&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;14&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;15&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;16&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;17&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;18&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;19&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;20&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;21&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;22&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;23&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;24&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;25&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;26&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;27&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;28&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;29&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;30&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;31&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;32&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;33&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;34&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;35&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;36&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;37&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;38&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;39&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;40&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;41&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;inline&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; pop(&lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; *token)   &lt;span class=&quot;comment&quot;&gt;// token指针指向栈顶的地址&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    AutoreleasePoolPage *page;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; *stop;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    page = pageForPointer(token);   &lt;span class=&quot;comment&quot;&gt;// 通过栈顶的地址找到对应的page&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    stop = (&lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; *)token;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (DebugPoolAllocation  &amp;amp;&amp;amp;  *stop != POOL_SENTINEL) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;comment&quot;&gt;// This check is not valid with DebugPoolAllocation off&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;comment&quot;&gt;// after an autorelease with a pool page but no pool in place.&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        _objc_fatal(&lt;span class=&quot;string&quot;&gt;&quot;invalid or prematurely-freed autorelease pool %p; &quot;&lt;/span&gt;, &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;                    token);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (PrintPoolHiwat) printHiwat();   &lt;span class=&quot;comment&quot;&gt;// 记录最高水位标记&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    page-&amp;gt;releaseUntil(stop);   &lt;span class=&quot;comment&quot;&gt;// 从栈顶开始操作出栈，并向栈中的对象发送release消息，直到遇到第一个哨兵对象&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;comment&quot;&gt;// memory: delete empty children&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;comment&quot;&gt;// 删除空掉的节点&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (DebugPoolAllocation  &amp;amp;&amp;amp;  page-&amp;gt;empty()) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;comment&quot;&gt;// special case: delete everything during page-per-pool debugging&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        AutoreleasePoolPage *parent = page-&amp;gt;parent;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        page-&amp;gt;kill();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        setHotPage(parent);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125; &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (DebugMissingPools  &amp;amp;&amp;amp;  page-&amp;gt;empty()  &amp;amp;&amp;amp;  !page-&amp;gt;parent) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;comment&quot;&gt;// special case: delete everything for pop(top) &lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;comment&quot;&gt;// when debugging missing autorelease pools&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        page-&amp;gt;kill();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        setHotPage(&lt;span class=&quot;literal&quot;&gt;nil&lt;/span&gt;);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125; &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (page-&amp;gt;child) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;comment&quot;&gt;// hysteresis: keep one empty child if page is more than half full&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (page-&amp;gt;lessThanHalfFull()) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;            page-&amp;gt;child-&amp;gt;kill();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;keyword&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (page-&amp;gt;child-&amp;gt;child) &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;            page-&amp;gt;child-&amp;gt;child-&amp;gt;kill();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;h3 id=&quot;AutoreleasePoolPage-autorelease-id-this&quot;&gt;&lt;a href=&quot;#AutoreleasePoolPage-autorelease-id-this&quot; class=&quot;headerlink&quot; title=&quot;AutoreleasePoolPage::autorelease((id)this);&quot;&gt;&lt;/a&gt;&lt;code&gt;AutoreleasePoolPage::autorelease((id)this);&lt;/code&gt;&lt;/h3&gt;&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;inline&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; autorelease(&lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; obj)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    assert(obj);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    assert(!obj-&amp;gt;isTaggedPointer());&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;id&lt;/span&gt; *dest __unused = autoreleaseFast(obj);   &lt;span class=&quot;comment&quot;&gt;//  添加obj对象到自动释放池的链表栈中&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    assert(!dest  ||  *dest == obj);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;return&lt;/span&gt; obj;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;&lt;code&gt;autorelease&lt;/code&gt;函数和&lt;code&gt;push&lt;/code&gt;函数一样，关键代码都是调用&lt;code&gt;autoreleaseFast&lt;/code&gt;函数向自动释放池的链表栈中添加一个对象，不过&lt;code&gt;push&lt;/code&gt;函数的入栈的是一个哨兵对象，而&lt;code&gt;autorelease&lt;/code&gt;函数入栈的是需要加入&lt;code&gt;autoreleasepool&lt;/code&gt;的对象。&lt;/p&gt;
+&lt;h2 id=&quot;四、补充&quot;&gt;&lt;a href=&quot;#四、补充&quot; class=&quot;headerlink&quot; title=&quot;四、补充&quot;&gt;&lt;/a&gt;四、补充&lt;/h2&gt;&lt;p&gt;上面我们讲了&lt;code&gt;AutoreleasePoolPage&lt;/code&gt;的定义的属性中有一个&lt;code&gt;hiwat&lt;/code&gt;表示high water mark（最高水位标记）。那么什么是最高水位标记呢？这个概念可以用自然界中的潮汐现象来解释。大家都知道潮水是有涨有落的，涨潮涨到最高时的水位就是最高水位。放在代码中来说，autoreleasepool的内存结构是一个双向链表栈，会频繁的有入栈和出栈操作，栈中存放的对象也会有增有减，&lt;code&gt;hiwat&lt;/code&gt;就记录了入栈对象最多时候对象的个数。&lt;/p&gt;
+&lt;figure class=&quot;highlight objc&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;11&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;12&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;13&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;14&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;15&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;16&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;keyword&quot;&gt;void&lt;/span&gt; printHiwat()&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;comment&quot;&gt;// Check and propagate high water mark&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;comment&quot;&gt;// Ignore high water marks under 256 to suppress noise.&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    AutoreleasePoolPage *p = hotPage();   &lt;span class=&quot;comment&quot;&gt;// 获取最新的page&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    uint32_t mark = p-&amp;gt;depth*COUNT + (uint32_t)(p-&amp;gt;next - p-&amp;gt;begin());    &lt;span class=&quot;comment&quot;&gt;// 计算栈中对象的数量&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &lt;span class=&quot;keyword&quot;&gt;if&lt;/span&gt; (mark &amp;gt; p-&amp;gt;hiwat  &amp;amp;&amp;amp;  mark &amp;gt; &lt;span class=&quot;number&quot;&gt;256&lt;/span&gt;) &amp;#123;    &lt;span class=&quot;comment&quot;&gt;// 当数量大于当前记录的最高水位标记且大&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;keyword&quot;&gt;for&lt;/span&gt;( ; p; p = p-&amp;gt;parent) &amp;#123;            &lt;span class=&quot;comment&quot;&gt;// 于256，更新每个page中的最高水位标记&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;            p-&amp;gt;unprotect();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;            p-&amp;gt;hiwat = mark;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;            p-&amp;gt;protect();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &lt;span class=&quot;comment&quot;&gt;// ······&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;回到开头的问题：加入AutoreleasePool的对象，release将延迟到什么时候执行？&lt;br&gt;相信现在各位心里都已经有答案了。&lt;/p&gt;
+&lt;h2 id=&quot;参考链接&quot;&gt;&lt;a href=&quot;#参考链接&quot; class=&quot;headerlink&quot; title=&quot;参考链接&quot;&gt;&lt;/a&gt;参考链接&lt;/h2&gt;&lt;p&gt;&lt;a href=&quot;http://blog.sunnyxx.com/2014/10/15/behind-autorelease/&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;http://blog.sunnyxx.com/2014/10/15/behind-autorelease/&lt;/a&gt;&lt;br&gt;&lt;a href=&quot;http://blog.leichunfeng.com/blog/2015/05/31/objective-c-autorelease-pool-implementation-principle/#jtss-tsina&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;http://blog.leichunfeng.com/blog/2015/05/31/objective-c-autorelease-pool-implementation-principle/#jtss-tsina&lt;/a&gt;&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;h2 id=&quot;一、AutoreleasePool是什么&quot;&gt;&lt;a href=&quot;#一、AutoreleasePool是什么&quot; class=&quot;headerlink&quot; title=&quot;一、AutoreleasePool是什么&quot;&gt;&lt;/a&gt;一、AutoreleasePool是什么&lt;/h2&gt;&lt;
+    
+    </summary>
+    
+      <category term="源码阅读" scheme="http://helly1024.github.io/categories/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/"/>
+    
+    
+      <category term="AutoreleasePool" scheme="http://helly1024.github.io/tags/AutoreleasePool/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>iOS Core Animation Advanced Techniques学习笔记（5）</title>
+    <link href="http://helly1024.github.io/2015/08/10/iOS%20Core%20Animation%20Advanced%20Techniques%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%885%EF%BC%89/"/>
+    <id>http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/</id>
+    <published>2015-08-10T09:56:25.000Z</published>
+    <updated>2015-08-10T09:56:25.000Z</updated>
+    
+    <content type="html">&lt;h1 id=&quot;显示动画&quot;&gt;&lt;a href=&quot;#显示动画&quot; class=&quot;headerlink&quot; title=&quot;显示动画&quot;&gt;&lt;/a&gt;显示动画&lt;/h1&gt;&lt;h3 id=&quot;属性动画&quot;&gt;&lt;a href=&quot;#属性动画&quot; class=&quot;headerlink&quot; title=&quot;属性动画&quot;&gt;&lt;/a&gt;属性动画&lt;/h3&gt;&lt;p&gt;通过&lt;code&gt;- (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key;&lt;/code&gt;方法，我们可以为一个图层添加一个显示动画。但是，当这个图层并不是一个视图的图层属性的实例时，动画会发生两次，一个是由我们设置的显示动画引起的，另一个这是因为图层的隐式动画。为了避免这种情况，我们需要在配置显示动画的时候指定它的代理，并实现代理方法&lt;code&gt;-animationDidStop:finished:&lt;/code&gt;，在其中设置一个新的事务，并禁用图层行为。&lt;/p&gt;
+&lt;p&gt;在设置显示动画的过程中，还有一个问题就是在动画完成之后图层的状态又回到了动画之前的状态。这是因为在默认情况下，动画完成之后将彻底移除，不会在其超出时间后还修改呈现层的图层。一旦动画完成，呈现层的图层将回到模型层图层的值，而我们又没有修改图层属性的值，因此动画完成后图层显示的还是之前的状态。&lt;/p&gt;
+&lt;p&gt;这里有两种解决方案，一种是在设置动画后更新图层对应属性的值：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;// Add explicit animation to a single layer
+CGFloat red = rand() / (double)INT_MAX;
+CGFloat green = rand() / (double)INT_MAX;
+CGFloat blue = rand() / (double)INT_MAX;
+
+CABasicAnimation *animation = [CABasicAnimation animation];
+animation.keyPath = @&amp;quot;backgroundColor&amp;quot;;
+animation.toValue = (__bridge id)[UIColor colorWithRed:red green:green blue:blue alpha:1].CGColor;
+animation.delegate = self;
+[self.colorLayer addAnimation:animation forKey:nil];
+
+self.colorLayer.backgroundColor = [UIColor colorWithRed:red green:green blue:blue alpha:1].CGColor;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;另一种则是设置动画的 fillMode 属性为 &lt;code&gt;kCAFillModeForward&lt;/code&gt; 以留在最终状态，并设置&lt;code&gt;removedOnCompletion&lt;/code&gt; 为 NO 以防止它被自动移除：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;// Add explicit animation to a single layer
+CGFloat red = rand() / (double)INT_MAX;
+CGFloat green = rand() / (double)INT_MAX;
+CGFloat blue = rand() / (double)INT_MAX;
+
+CABasicAnimation *animation = [CABasicAnimation animation];
+animation.keyPath = @&amp;quot;backgroundColor&amp;quot;;
+animation.toValue = (__bridge id)[UIColor colorWithRed:red green:green blue:blue alpha:1].CGColor;
+animation.delegate = self;
+
+animation.fillMode = kCAFillModeForwards;
+animation.removedOnCompletion = NO;
+
+[self.colorLayer addAnimation:animation forKey:nil];
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;需要注意的是：如果将已完成的动画保持在 layer 上时，会造成额外的开销，因为渲染器会去进行额外的绘画工作。&lt;/p&gt;
+&lt;p&gt;还有很重要的一点就是，当我们创建好一个动画并添加给一个layer时就立刻复制了一份，因此这个动画是可以重复添加个多个layer的。&lt;/p&gt;
+&lt;h3 id=&quot;关键帧动画&quot;&gt;&lt;a href=&quot;#关键帧动画&quot; class=&quot;headerlink&quot; title=&quot;关键帧动画&quot;&gt;&lt;/a&gt;关键帧动画&lt;/h3&gt;&lt;p&gt;&lt;code&gt;CAKeyframeAnimation&lt;/code&gt;是另一种UIKit没有暴露出来但功能强大的类。和&lt;code&gt;CABasicAnimation&lt;/code&gt;类似，&lt;code&gt;CAKeyframeAnimation&lt;/code&gt;同样是&lt;code&gt;CAPropertyAnimation&lt;/code&gt;的一个子类，它依然作用于单一的一个属性，但是和&lt;code&gt;CABasicAnimation&lt;/code&gt;不一样的是，它不限制于设置一个起始和结束的值，而是可以根据一连串随意的值来做动画。&lt;/p&gt;
+&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;CAKeyframeAnimation *animation = [CAKeyframeAnimation animation];
+animation.keyPath = @&amp;quot;position.x&amp;quot;;
+animation.values = @[ @0, @10, @-10, @10, @0 ];
+animation.keyTimes = @[ @0, @(1 / 6.0), @(3 / 6.0), @(5 / 6.0), @1 ];
+animation.duration = 0.4;
+
+animation.additive = YES;
+
+[form.layer addAnimation:animation forKey:@&amp;quot;shake&amp;quot;];
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;在使用&lt;code&gt;CAKeyframeAnimation&lt;/code&gt;做动画时需要注意的是&lt;code&gt;CAKeyframeAnimation&lt;/code&gt;并不能把当前layer的值作为第一帧动画，这就导致动画开始时会突然跳到第一帧的值，再再动画完成后恢复到原来的值，所以为了动画的平滑效果，我们需要开始和结束时的关键帧来匹配当前属性的值。&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;CAKeyframeAnimation&lt;/code&gt;还有另外一种方式来指定动画，就是使用CGPath。path属性可以用一种直观的方式，使用Core Graphics函数定义运动序列来绘制动画。&lt;/p&gt;
+&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //create a path
+    UIBezierPath *bezierPath = [[UIBezierPath alloc] init];
+    [bezierPath moveToPoint:CGPointMake(0, 150)];
+    [bezierPath addCurveToPoint:CGPointMake(300, 150) controlPoint1:CGPointMake(75, 0) controlPoint2:CGPointMake(225, 300)];
+
+    //add the ship
+    CALayer *shipLayer = [CALayer layer];
+    shipLayer.frame = CGRectMake(0, 0, 64, 64);
+    shipLayer.position = CGPointMake(0, 150);
+    shipLayer.contents = (__bridge id)[UIImage imageNamed: @&amp;quot;Ship.png&amp;quot;].CGImage;
+    [self.containerView.layer addSublayer:shipLayer];
+
+    //create the keyframe animation
+    CAKeyframeAnimation *animation = [CAKeyframeAnimation animation];
+    animation.keyPath = @&amp;quot;position&amp;quot;;
+    animation.duration = 4.0;
+    animation.path = bezierPath.CGPath;
+    animation.rotationMode = kCAAnimationRotateAuto;
+
+    [shipLayer addAnimation:animation forKey:nil];
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;虚拟属性&quot;&gt;&lt;a href=&quot;#虚拟属性&quot; class=&quot;headerlink&quot; title=&quot;虚拟属性&quot;&gt;&lt;/a&gt;虚拟属性&lt;/h3&gt;&lt;p&gt;在layer中，有一种属性其实是不存在的，如：&lt;code&gt;transform.rotation&lt;/code&gt;，&lt;code&gt;transform.rotation&lt;/code&gt;和&lt;code&gt;transform.rotation&lt;/code&gt;等。因为&lt;code&gt;CATransform3D&lt;/code&gt;并不是一个对象，而是一个结构体，也没有符合KVC相关属性，它们实际上是CALayer用于处理动画变换的虚拟属性。&lt;/p&gt;
+&lt;p&gt;它们不能被直接使用。当对他们做动画时，Core Animation自动地根据通过&lt;code&gt;CAValueFunction&lt;/code&gt;来计算的值来更新&lt;code&gt;transform&lt;/code&gt;属性。&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;CAValueFunction&lt;/code&gt;用于把我们赋给虚拟的transform.rotation简单浮点值转换成真正的用于摆放图层的CATransform3D矩阵值。我们可以通过设置&lt;code&gt;CAPropertyAnimation&lt;/code&gt;的&lt;code&gt;valueFunction&lt;/code&gt;属性来改变，这将会覆盖默认的函数。&lt;/p&gt;
+&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //add the ship
+    CALayer *shipLayer = [CALayer layer];
+    shipLayer.frame = CGRectMake(0, 0, 128, 128);
+    shipLayer.position = CGPointMake(150, 150);
+    shipLayer.contents = (__bridge id)[UIImage imageNamed: @&amp;quot;Ship.png&amp;quot;].CGImage;
+    [self.containerView.layer addSublayer:shipLayer];
+
+    //animate the ship rotation
+    CABasicAnimation *animation = [CABasicAnimation animation];
+    animation.keyPath = @&amp;quot;transform.rotation&amp;quot;;
+    animation.duration = 2.0;
+    animation.byValue = @(M_PI * 2);
+    [shipLayer addAnimation:animation forKey:nil];
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;动画组&quot;&gt;&lt;a href=&quot;#动画组&quot; class=&quot;headerlink&quot; title=&quot;动画组&quot;&gt;&lt;/a&gt;动画组&lt;/h3&gt;&lt;p&gt;&lt;code&gt;CABasicAnimation&lt;/code&gt;和&lt;code&gt;CAKeyframeAnimation&lt;/code&gt;仅仅作用于单独的属性，而&lt;code&gt;CAAnimationGroup&lt;/code&gt;可以把这些动画组合在一起。&lt;code&gt;CAAnimationGroup&lt;/code&gt;是另一个继承于&lt;code&gt;CAAnimation&lt;/code&gt;的子类，它添加了一个&lt;code&gt;animations&lt;/code&gt;数组的属性，用来组合别的动画。&lt;/p&gt;
+&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)viewDidLoad
+{
+    [super viewDidLoad];
+
+    //create a path
+    UIBezierPath *bezierPath = [[UIBezierPath alloc] init];
+    [bezierPath moveToPoint:CGPointMake(0, 150)];
+    [bezierPath addCurveToPoint:CGPointMake(300, 150) 
+                   controlPoint1:CGPointMake(75, 0) 
+                   controlPoint2:CGPointMake(225, 300)];
+
+    //draw the path using a CAShapeLayer
+    CAShapeLayer *pathLayer = [CAShapeLayer layer];
+    pathLayer.path = bezierPath.CGPath;
+    pathLayer.fillColor = [UIColor clearColor].CGColor;
+    pathLayer.strokeColor = [UIColor redColor].CGColor;
+    pathLayer.lineWidth = 3.0f;
+    [self.containerView.layer addSublayer:pathLayer];
+
+    //add a colored layer
+    CALayer *colorLayer = [CALayer layer];
+    colorLayer.frame = CGRectMake(0, 0, 64, 64);
+    colorLayer.position = CGPointMake(0, 150);
+    colorLayer.backgroundColor = [UIColor greenColor].CGColor;
+    [self.containerView.layer addSublayer:colorLayer];
+
+    //create the position animation
+    CAKeyframeAnimation *animation1 = [CAKeyframeAnimation animation];
+    animation1.keyPath = @&amp;quot;position&amp;quot;;
+    animation1.path = bezierPath.CGPath;
+    animation1.rotationMode = kCAAnimationRotateAuto;
+
+    //create the color animation
+    CABasicAnimation *animation2 = [CABasicAnimation animation];
+    animation2.keyPath = @&amp;quot;backgroundColor&amp;quot;;
+    animation2.toValue = (__bridge id)[UIColor redColor].CGColor;
+
+    //create group animation
+    CAAnimationGroup *groupAnimation = [CAAnimationGroup animation];
+    groupAnimation.animations = @[animation1, animation2]; 
+    groupAnimation.duration = 4.0;
+
+    //add the animation to the color layer
+    [colorLayer addAnimation:groupAnimation forKey:nil];
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;过渡&quot;&gt;&lt;a href=&quot;#过渡&quot; class=&quot;headerlink&quot; title=&quot;过渡&quot;&gt;&lt;/a&gt;过渡&lt;/h3&gt;&lt;p&gt;属性动画只对layer的可动画属性起作用，如果要改变一个不可动画属性（如图片、文本），或者从层级关系中添加或移除图层，属性动画将不再起作用，这时，我们可以使用过渡来实现动画效果。&lt;/p&gt;
+&lt;p&gt;为了创建一个过渡动画，我们将使用CATransition，同样是另一个CAAnimation的子类，和别的子类不同，CATransition有一个type和subtype来标识变换效果。type属性是一个NSString类型，用来设置过渡动画效果，可以被设置成如下类型：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;kCATransitionFade &lt;/li&gt;
+&lt;li&gt;kCATransitionMoveIn &lt;/li&gt;
+&lt;li&gt;kCATransitionPush &lt;/li&gt;
+&lt;li&gt;kCATransitionReveal&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;通过subtype我们可以控制动画的方向，它提供了如下四种类型：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;kCATransitionFromRight &lt;/li&gt;
+&lt;li&gt;kCATransitionFromLeft &lt;/li&gt;
+&lt;li&gt;kCATransitionFromTop &lt;/li&gt;
+&lt;li&gt;kCATransitionFromBottom&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (IBAction)switchImage
+{
+    //set up crossfade transition
+    CATransition *transition = [CATransition animation];
+    transition.type = kCATransitionFade;
+
+    //apply transition to imageview backing layer
+    [self.imageView.layer addAnimation:transition forKey:nil];
+
+    //cycle to next image
+    UIImage *currentImage = self.imageView.image;
+    NSUInteger index = [self.images indexOfObject:currentImage];
+    index = (index + 1) % [self.images count];
+    self.imageView.image = self.images[index];
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;隐式过渡&quot;&gt;&lt;a href=&quot;#隐式过渡&quot; class=&quot;headerlink&quot; title=&quot;隐式过渡&quot;&gt;&lt;/a&gt;隐式过渡&lt;/h3&gt;&lt;p&gt;对于视图关联的图层，或者是其他隐式动画的行为，过渡的特性依然是被禁用的，但是对于我们自己创建的图层，这意味着对图层contents图片做的改动都会自动附上淡入淡出的动画。&lt;/p&gt;
+&lt;h3 id=&quot;对图层树的动画&quot;&gt;&lt;a href=&quot;#对图层树的动画&quot; class=&quot;headerlink&quot; title=&quot;对图层树的动画&quot;&gt;&lt;/a&gt;对图层树的动画&lt;/h3&gt;&lt;p&gt;&lt;code&gt;CATransition&lt;/code&gt;并不作用于指定的图层属性，这就是说我们可以在即使不能准确得知改变了什么的情况下对图层做动画，例如，在不知道UITableView哪一行被添加或者删除的情况下，直接就可以平滑地刷新它，或者在不知道UIViewController内部的视图层级的情况下对两个不同的实例做过渡动画。&lt;/p&gt;
+&lt;p&gt;在这里，我们只要将过渡动画添加到被影响图层的&lt;code&gt;superlayer&lt;/code&gt;，就实现了对整个图层树添加过渡动画。&lt;/p&gt;
+&lt;p&gt;对&lt;code&gt;UITabBarController&lt;/code&gt;添加过渡动画，示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;#import &amp;quot;AppDelegate.h&amp;quot;
+#import &amp;quot;FirstViewController.h&amp;quot; 
+#import &amp;quot;SecondViewController.h&amp;quot;
+#import 
+@implementation AppDelegate
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
+    self.window = [[UIWindow alloc] initWithFrame: [[UIScreen mainScreen] bounds]];
+    UIViewController *viewController1 = [[FirstViewController alloc] init];
+    UIViewController *viewController2 = [[SecondViewController alloc] init];
+    self.tabBarController = [[UITabBarController alloc] init];
+    self.tabBarController.viewControllers = @[viewController1, viewController2];
+    self.tabBarController.delegate = self;
+    self.window.rootViewController = self.tabBarController;
+    [self.window makeKeyAndVisible];
+    return YES;
+}
+
+- (void)tabBarController:(UITabBarController *)tabBarController didSelectViewController:(UIViewController *)viewController
+{
+    ￼//set up crossfade transition
+    CATransition *transition = [CATransition animation];
+    transition.type = kCATransitionFade;
+
+    //apply transition to tab bar controller&amp;apos;s view
+    [self.tabBarController.view.layer addAnimation:transition forKey:nil];
+}
+
+@end
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;在动画过程中取消动画&quot;&gt;&lt;a href=&quot;#在动画过程中取消动画&quot; class=&quot;headerlink&quot; title=&quot;在动画过程中取消动画&quot;&gt;&lt;/a&gt;在动画过程中取消动画&lt;/h3&gt;&lt;p&gt;移除指定动画：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)removeAnimationForKey:(NSString *)key;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;移除所有动画：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)removeAllAnimations;
+&lt;/code&gt;&lt;/pre&gt;&lt;hr&gt;
+&lt;h1 id=&quot;图层时间&quot;&gt;&lt;a href=&quot;#图层时间&quot; class=&quot;headerlink&quot; title=&quot;图层时间&quot;&gt;&lt;/a&gt;图层时间&lt;/h1&gt;&lt;h3 id=&quot;CAMediaTiming协议&quot;&gt;&lt;a href=&quot;#CAMediaTiming协议&quot; class=&quot;headerlink&quot; title=&quot;CAMediaTiming协议&quot;&gt;&lt;/a&gt;CAMediaTiming协议&lt;/h3&gt;&lt;p&gt;CAMediaTiming协议定义了在一段动画内用来控制逝去时间的属性的集合，CALayer和CAAnimation都实现了这个协议，所以时间可以被任意基于一个图层或者一段动画的类控制。&lt;/p&gt;
+&lt;h4 id=&quot;持续和重复&quot;&gt;&lt;a href=&quot;#持续和重复&quot; class=&quot;headerlink&quot; title=&quot;持续和重复&quot;&gt;&lt;/a&gt;持续和重复&lt;/h4&gt;&lt;p&gt;&lt;code&gt;duration&lt;/code&gt;：设置动画迭代一次的时间&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;repeatCount&lt;/code&gt;：设置动画迭代次数&lt;/p&gt;
+&lt;p&gt;动画时长 = &lt;code&gt;duration&lt;/code&gt; * &lt;code&gt;repeatCount&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;repeatDuration&lt;/code&gt;：设置动画重复时长（当时此属性值与duration的值一致时动画不重复）&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;autoreverses&lt;/code&gt;：完成一次动画迭代后，自动后退到图层原始状态&lt;/p&gt;
+&lt;h4 id=&quot;相对时间&quot;&gt;&lt;a href=&quot;#相对时间&quot; class=&quot;headerlink&quot; title=&quot;相对时间&quot;&gt;&lt;/a&gt;相对时间&lt;/h4&gt;&lt;p&gt;&lt;code&gt;beginTime&lt;/code&gt;：设置动画开始延迟时间&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;speed&lt;/code&gt;：设置动画播放倍数，默认为1.0&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;timeOffset&lt;/code&gt;：设置动画播放位置（0~1）&lt;/p&gt;
+&lt;h4 id=&quot;fillMode&quot;&gt;&lt;a href=&quot;#fillMode&quot; class=&quot;headerlink&quot; title=&quot;fillMode&quot;&gt;&lt;/a&gt;fillMode&lt;/h4&gt;&lt;p&gt;&lt;code&gt;fillMode&lt;/code&gt;用来设置动画开始前和结束后的这段时间动画属性的值，它是一个NSString类型，可以接受如下四种常量：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;kCAFillModeForwards &lt;/li&gt;
+&lt;li&gt;kCAFillModeBackwards &lt;/li&gt;
+&lt;li&gt;kCAFillModeBoth &lt;/li&gt;
+&lt;li&gt;kCAFillModeRemoved&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;注意，如果要图层保持动画结束时的状态，除了要设置&lt;code&gt;fillMode&lt;/code&gt;，还需要将&lt;code&gt;removeOnCompletion&lt;/code&gt;设置为&lt;code&gt;NO&lt;/code&gt;。另外，将已完成的动画保持在layer上，会造成额外的开销，因为渲染器需要进行额外的绘制工作。所以，最好是在为&lt;code&gt;layer&lt;/code&gt;添加动画的时候设置一个key，这样就可以在不需要动画的时候将它从&lt;code&gt;layer&lt;/code&gt;上移除。&lt;/p&gt;
+&lt;h3 id=&quot;层级关系时间&quot;&gt;&lt;a href=&quot;#层级关系时间&quot; class=&quot;headerlink&quot; title=&quot;层级关系时间&quot;&gt;&lt;/a&gt;层级关系时间&lt;/h3&gt;&lt;p&gt;在图层树中每个图层都有一个特定的坐标系统来定义该图层和它的父图层之间的关系，动画时间同样也是如此。每个图层和动画都有一套基于它父视图的层级关系概念上的时间。改变一个layer的时间将会影响该图层和它的子图层的动画，但不会对它的父图层产生影响。这点同样适用于由&lt;code&gt;CAAnimationGroup&lt;/code&gt;组成的动画。&lt;/p&gt;
+&lt;p&gt;调整&lt;code&gt;CALayer&lt;/code&gt;或&lt;code&gt;CAAnimationGroup&lt;/code&gt;的&lt;code&gt;duration&lt;/code&gt;，&lt;code&gt;repeatCount&lt;/code&gt;和&lt;code&gt;repeatDuration&lt;/code&gt;属性不会对子图层的动画产生影响，而调整&lt;code&gt;beginTime&lt;/code&gt;, &lt;code&gt;timeOffset&lt;/code&gt;和&lt;code&gt;speed&lt;/code&gt; 属相将会对子视图的动画也产生影响。&lt;/p&gt;
+&lt;h4 id=&quot;全局时间和局部时间&quot;&gt;&lt;a href=&quot;#全局时间和局部时间&quot; class=&quot;headerlink&quot; title=&quot;全局时间和局部时间&quot;&gt;&lt;/a&gt;全局时间和局部时间&lt;/h4&gt;&lt;p&gt;在Core Animation当中，有着全局时间和局部时间的概念。全局时间以设备时间为标准，通过如下方法可以获得：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;CFTimeInterval time = CACurrentMediaTime();
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;局部时间是每个layer的时间体系，当&lt;code&gt;beginTime&lt;/code&gt;,&lt;code&gt;timeOffset&lt;/code&gt;或&lt;code&gt;speed&lt;/code&gt;属性发生改变时，局部时间可能会和全局时间不一致。通过以下方法可以在转换局部时间：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (CFTimeInterval)convertTime:(CFTimeInterval)t fromLayer:(CALayer *)l; 
+- (CFTimeInterval)convertTime:(CFTimeInterval)t toLayer:(CALayer *)l;
+&lt;/code&gt;&lt;/pre&gt;&lt;h4 id=&quot;暂停，倒放和快进&quot;&gt;&lt;a href=&quot;#暂停，倒放和快进&quot; class=&quot;headerlink&quot; title=&quot;暂停，倒放和快进&quot;&gt;&lt;/a&gt;暂停，倒放和快进&lt;/h4&gt;&lt;p&gt;当将一个动画的&lt;code&gt;speed&lt;/code&gt;属性设为0，动画将暂停，但是这不会对正在动画中的layer产生影响，因为当我们将一个动画添加到一个layer上时，是将动画copy然后赋值给layer。我们可以通过&lt;code&gt;-animationForKey:&lt;/code&gt;获取到正在动画的layer真正的动画，但是，即使获取到了正确的动画，我们依然不能通过直接修改动画的&lt;code&gt;speed&lt;/code&gt;属性来让动画暂停。&lt;/p&gt;
+&lt;p&gt;当然，我们也可以在动画被移除钱获取presentation layer的属性值然后赋值给model layer。但是这样做有一个缺点就是，在之后想要再继续动画将会很复杂。&lt;/p&gt;
+&lt;p&gt;暂停动画正确地姿势是利用层级关系时间。也就是调整动画所属layer的&lt;code&gt;speed&lt;/code&gt;属性。&lt;/p&gt;
+&lt;p&gt;如果要调整整个app的动画速度，我们只需要如此这般：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;self.window.layer.speed = 100;
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;手动动画&quot;&gt;&lt;a href=&quot;#手动动画&quot; class=&quot;headerlink&quot; title=&quot;手动动画&quot;&gt;&lt;/a&gt;手动动画&lt;/h3&gt;&lt;p&gt;通过layer的&lt;code&gt;timeOffset&lt;/code&gt;属性和&lt;code&gt;UIPanGestureRecognizer&lt;/code&gt;手势，我们可以很容易地实现一个手动控制的动画。&lt;/p&gt;
+&lt;hr&gt;
+&lt;h1 id=&quot;缓冲&quot;&gt;&lt;a href=&quot;#缓冲&quot; class=&quot;headerlink&quot; title=&quot;缓冲&quot;&gt;&lt;/a&gt;缓冲&lt;/h1&gt;&lt;h3 id=&quot;动画速度&quot;&gt;&lt;a href=&quot;#动画速度&quot; class=&quot;headerlink&quot; title=&quot;动画速度&quot;&gt;&lt;/a&gt;动画速度&lt;/h3&gt;&lt;h4 id=&quot;CAMediaTimingFunction&quot;&gt;&lt;a href=&quot;#CAMediaTimingFunction&quot; class=&quot;headerlink&quot; title=&quot;CAMediaTimingFunction&quot;&gt;&lt;/a&gt;CAMediaTimingFunction&lt;/h4&gt;&lt;p&gt;通过设置&lt;code&gt;CAAnimation&lt;/code&gt;的&lt;code&gt;timingFunction&lt;/code&gt;属性，我们可以改变动画的缓冲函数：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;animation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;如果要改变隐式动画的缓冲函数，我们可以使用&lt;code&gt;CATransaction&lt;/code&gt;的&lt;code&gt;+setAnimationTimingFunction:&lt;/code&gt;方法：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;[CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;创建&lt;code&gt;CAMediaTimingFunction&lt;/code&gt;最简单的方法是调用&lt;code&gt;+timingFunctionWithName:&lt;/code&gt;的构造方法。这里传入如下几个常量之一：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;kCAMediaTimingFunctionLinear &lt;/li&gt;
+&lt;li&gt;kCAMediaTimingFunctionEaseIn &lt;/li&gt;
+&lt;li&gt;kCAMediaTimingFunctionEaseOut &lt;/li&gt;
+&lt;li&gt;kCAMediaTimingFunctionEaseInEaseOut&lt;/li&gt;
+&lt;li&gt;kCAMediaTimingFunctionDefault&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4 id=&quot;UIView的动画缓冲&quot;&gt;&lt;a href=&quot;#UIView的动画缓冲&quot; class=&quot;headerlink&quot; title=&quot;UIView的动画缓冲&quot;&gt;&lt;/a&gt;UIView的动画缓冲&lt;/h4&gt;&lt;p&gt;UIKit的动画也同样支持这些缓冲方法的使用，尽管语法和常量有些不同，为了改变UIView动画的缓冲选项，给options参数添加如下常量之一：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;UIViewAnimationOptionCurveEaseInOut &lt;/li&gt;
+&lt;li&gt;UIViewAnimationOptionCurveEaseIn &lt;/li&gt;
+&lt;li&gt;UIViewAnimationOptionCurveEaseOut &lt;/li&gt;
+&lt;li&gt;UIViewAnimationOptionCurveLinear&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;[UIView animateWithDuration:5
+                      delay:1
+                    options:UIViewAnimationOptionCurveEaseInOut
+                 animations:^{
+    view.layer.backgroundColor = [UIColor redColor].CGColor;
+}
+                 completion:NULL];
+&lt;/code&gt;&lt;/pre&gt;&lt;h4 id=&quot;缓冲和关键帧动画&quot;&gt;&lt;a href=&quot;#缓冲和关键帧动画&quot; class=&quot;headerlink&quot; title=&quot;缓冲和关键帧动画&quot;&gt;&lt;/a&gt;缓冲和关键帧动画&lt;/h4&gt;&lt;p&gt;&lt;code&gt;CAKeyframeAnimation&lt;/code&gt;有一个NSArray类型的&lt;code&gt;timingFunctions&lt;/code&gt;属性，我们可以用它来对每次动画的步骤指定不同的计时函数。但是指定函数的个数一定要等于keyframes数组的元素个数减一，因为它是描述每一帧之间动画速度的函数。&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;h1 id=&quot;显示动画&quot;&gt;&lt;a href=&quot;#显示动画&quot; class=&quot;headerlink&quot; title=&quot;显示动画&quot;&gt;&lt;/a&gt;显示动画&lt;/h1&gt;&lt;h3 id=&quot;属性动画&quot;&gt;&lt;a href=&quot;#属性动画&quot; class=&quot;headerlink&quot; title=&quot;属性动画&quot;&gt;&lt;/a
+    
+    </summary>
+    
+      <category term="学习笔记" scheme="http://helly1024.github.io/categories/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/"/>
+    
+    
+      <category term="Core Animation" scheme="http://helly1024.github.io/tags/Core-Animation/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>iOS Core Animation Advanced Techniques学习笔记（2）</title>
+    <link href="http://helly1024.github.io/2015/08/10/iOS%20Core%20Animation%20Advanced%20Techniques%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%882%EF%BC%89/"/>
+    <id>http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（2）/</id>
+    <published>2015-08-10T09:54:26.000Z</published>
+    <updated>2015-08-10T11:32:57.000Z</updated>
+    
+    <content type="html">&lt;h1 id=&quot;变换&quot;&gt;&lt;a href=&quot;#变换&quot; class=&quot;headerlink&quot; title=&quot;变换&quot;&gt;&lt;/a&gt;变换&lt;/h1&gt;&lt;h3 id=&quot;仿射变换&quot;&gt;&lt;a href=&quot;#仿射变换&quot; class=&quot;headerlink&quot; title=&quot;仿射变换&quot;&gt;&lt;/a&gt;仿射变换&lt;/h3&gt;&lt;p&gt;&lt;code&gt;CGAffineTransform&lt;/code&gt;是一个可以和二维空间向量（如CGPoint）做乘法的3*2的矩阵。当对图层应用变换矩阵，图层内的每一个点都被相应地做变换，从而形成一个新的四边形的形状。&lt;code&gt;CGAffineTransform&lt;/code&gt;中仿射的意思是无论变换矩阵用什么值，图层中平行的两条线在变换后任然保持平行。&lt;/p&gt;
+&lt;p&gt;UIView可以通过设置&lt;code&gt;transform&lt;/code&gt;属性做变换，但实际上它只是封装了内部图层的变换。CALayer同样也有一个&lt;code&gt;transform&lt;/code&gt;属性，但它的类型是&lt;code&gt;CATransform3D&lt;/code&gt;，而不是&lt;code&gt;CGAffineTransform&lt;/code&gt;。CALayer对应于UIView的&lt;code&gt;transform&lt;/code&gt;属性叫做&lt;code&gt;affineTransform&lt;/code&gt;。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;CGAffineTransformMakeRotation(CGFloat angle)              // 旋转
+CGAffineTransformMakeScale(CGFloat sx, CGFloat sy)        // 缩放
+CGAffineTransformMakeTranslation(CGFloat tx, CGFloat ty)  // 平移
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;由于iOS变换函数使用弧度而不是角度作为单位，所以做旋转变换的时候可以使用如下宏来将角度换算成弧度：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;#define RADIANS_TO_DEGREES(x) ((x)/M_PI*180.0)
+&lt;/code&gt;&lt;/pre&gt;&lt;h4 id=&quot;混合变换&quot;&gt;&lt;a href=&quot;#混合变换&quot; class=&quot;headerlink&quot; title=&quot;混合变换&quot;&gt;&lt;/a&gt;混合变换&lt;/h4&gt;&lt;p&gt;&lt;strong&gt;混合变换函数：&lt;/strong&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;CGAffineTransformRotate(CGAffineTransform t, CGFloat angle)
+CGAffineTransformScale(CGAffineTransform t, CGFloat sx, CGFloat sy)
+CGAffineTransformTranslate(CGAffineTransform t, CGFloat tx, CGFloat ty)
+CGAffineTransformConcat(CGAffineTransform t1, CGAffineTransform t2)
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;当生成一个混合变换的时候，首先需要创建一个&lt;code&gt;CGAffineTransform&lt;/code&gt;类型的空值，矩阵论中称为单位矩阵，Core Graphics 中提供了一个方便的常量：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;CGAffineTransformIdentity
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;如果需要混合两个已经存在的变换矩阵，就可以使用如下方法，在两个变换的基础上创建一个新的变换：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;CGAffineTransformConcat(CGAffineTransform t1, CGAffineTransform t2);
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;示例代码：    &lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)viewDidLoad
+{
+    [super viewDidLoad]; 
+
+    //create a new transform
+    CGAffineTransform transform = CGAffineTransformIdentity; 
+
+    //scale by 50%
+    transform = CGAffineTransformScale(transform, 0.5, 0.5); 
+
+    //rotate by 30 degrees
+    transform = CGAffineTransformRotate(transform, M_PI / 180.0 * 30.0); 
+
+    //translate by 200 points
+    transform = CGAffineTransformTranslate(transform, 200, 0);
+
+    //apply transform to layer
+    self.layerView.layer.affineTransform = transform;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;3D变换&quot;&gt;&lt;a href=&quot;#3D变换&quot; class=&quot;headerlink&quot; title=&quot;3D变换&quot;&gt;&lt;/a&gt;3D变换&lt;/h3&gt;&lt;p&gt;&lt;code&gt;CATransform3D&lt;/code&gt;是一个可以在3维空间内做变换的4*4的矩阵。和&lt;code&gt;CGAffineTransform&lt;/code&gt;矩阵类似，Core Animation提供了一系列的方法用来创建和组合&lt;code&gt;CATransform3D&lt;/code&gt;类型的矩阵，和Core Graphics的函数类似，但是3D的平移和旋转多处了一个z参数，并且旋转函数除了angle之外多出了x,y,z三个参数，分别决定了每个坐标轴方向上的旋转：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;CATransform3DMakeRotation(CGFloat angle, CGFloat x, CGFloat y, CGFloat z)
+CATransform3DMakeScale(CGFloat sx, CGFloat sy, CGFloat sz) 
+CATransform3DMakeTranslation(Gloat tx, CGFloat ty, CGFloat tz)
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;绕Z轴的旋转等同于之前二维空间的仿射旋转，但是绕X轴和Y轴的旋转就突破了屏幕的二维空间，并且在用户视角看来发生了倾斜。&lt;/p&gt;
+&lt;p&gt;如果要实现透视效果，还需要引入投影变换（又称作z变换）来对除了旋转之外的变换矩阵做一些修改，而这可以通过修改矩阵值来实现。&lt;code&gt;CATransform3D&lt;/code&gt;中的透视效果通过矩阵中一个很简单的元素来控制：&lt;code&gt;m34&lt;/code&gt;。&lt;code&gt;m34&lt;/code&gt;用于按比例缩放x和y的值来计算到底要离视角多远。&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;m34&lt;/code&gt;的默认值是0，可以通过设置&lt;code&gt;m34&lt;/code&gt;为-1.0/d来应用透视效果。d代表了想象中视角相机和屏幕之间的距离，以像素为单位，通常设置为500-1000。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@implementation ViewController
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //create a new transform
+    CATransform3D transform = CATransform3DIdentity;
+
+    //apply perspective
+    transform.m34 = - 1.0 / 500.0;
+
+    //rotate by 45 degrees along the Y axis
+    transform = CATransform3DRotate(transform, M_PI_4, 0, 1, 0);
+
+    //apply to layer
+    self.layerView.layer.transform = transform;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;h4 id=&quot;灭点&quot;&gt;&lt;a href=&quot;#灭点&quot; class=&quot;headerlink&quot; title=&quot;灭点&quot;&gt;&lt;/a&gt;灭点&lt;/h4&gt;&lt;p&gt;灭点是指在透视角度物体远离视角的那端汇聚消失的那个点。在现实中，这个点通常是视图的中心，于是为了在屏幕中创建拟真效果的透视，这个点应该聚在屏幕中点，或者至少是包含所有3D对象的视图中点。&lt;/p&gt;
+&lt;p&gt;Core Animation定义了这个点位于变换图层的anchorPoint。这就是说，当图层发生变换时，这个点永远位于图层变换之前anchorPoint的位置。&lt;/p&gt;
+&lt;p&gt;当改变一个图层的&lt;code&gt;position&lt;/code&gt;，也就改变了它的灭点，做3D变换的时候要时刻记住这一点，当视图通过调整&lt;code&gt;m34&lt;/code&gt;来让它更加有3D效果，应该首先把它放置于屏幕中央，然后通过平移来把它移动到指定位置，而不是直接改变它的&lt;code&gt;position&lt;/code&gt;，这样所有的3D图层都共享一个灭点。&lt;/p&gt;
+&lt;h4 id=&quot;sublayerTransform属性&quot;&gt;&lt;a href=&quot;#sublayerTransform属性&quot; class=&quot;headerlink&quot; title=&quot;sublayerTransform属性&quot;&gt;&lt;/a&gt;sublayerTransform属性&lt;/h4&gt;&lt;p&gt;如果要为多个视图或图层做3D变换并且保证灭点设置在容器图层中心，可以使用CALayer的&lt;code&gt;sublayerTransform&lt;/code&gt;属性：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@interface ViewController ()
+
+@property (nonatomic, weak) IBOutlet UIView *containerView;
+@property (nonatomic, weak) IBOutlet UIView *layerView1;
+@property (nonatomic, weak) IBOutlet UIView *layerView2;
+
+@end
+
+@implementation ViewController
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+
+    //apply perspective transform to container
+    CATransform3D perspective = CATransform3DIdentity;
+    perspective.m34 = - 1.0 / 500.0;
+    self.containerView.layer.sublayerTransform = perspective;
+
+    //rotate layerView1 by 45 degrees along the Y axis
+    CATransform3D transform1 = CATransform3DMakeRotation(M_PI_4, 0, 1, 0);
+    self.layerView1.layer.transform = transform1;
+
+    //rotate layerView2 by 45 degrees along the Y axis
+    CATransform3D transform2 = CATransform3DMakeRotation(-M_PI_4, 0, 1, 0);
+    self.layerView2.layer.transform = transform2;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;禁用背面绘制：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.doubleSided = NO;
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;固体对象&quot;&gt;&lt;a href=&quot;#固体对象&quot; class=&quot;headerlink&quot; title=&quot;固体对象&quot;&gt;&lt;/a&gt;固体对象&lt;/h3&gt;&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@implementation RootViewController
+
+- (void)viewDidLoad {
+
+    [super viewDidLoad];
+
+    CATransform3D perspective = CATransform3DIdentity;
+    perspective.m34 = -1.0 / 500;
+    perspective = CATransform3DRotate(perspective, -M_PI_4, 1, 0, 0);
+    perspective = CATransform3DRotate(perspective, -M_PI, 0, 1, 0);
+
+    self.containerView.layer.sublayerTransform = perspective;
+
+    CATransform3D transform = CATransform3DMakeTranslation(0, 0, 100);
+    [self addFace:0 withTransform:transform];
+
+    transform = CATransform3DMakeTranslation(100, 0, 0);
+    transform = CATransform3DRotate(transform, M_PI_2, 0, 1, 0);
+    [self addFace:1 withTransform:transform];
+
+    transform = CATransform3DMakeTranslation(-100, 0, 0);
+    transform = CATransform3DRotate(transform, -M_PI_2, 0, 1, 0);
+    [self addFace:2 withTransform:transform];
+
+    transform = CATransform3DMakeTranslation(0, 100, 0);
+    transform = CATransform3DRotate(transform, -M_PI_2, 1, 0, 0);
+    [self addFace:3 withTransform:transform];
+
+    transform = CATransform3DMakeTranslation(0, -100, 0);
+    transform = CATransform3DRotate(transform, M_PI_2, 1, 0, 0);
+    [self addFace:4 withTransform:transform];
+
+    transform = CATransform3DMakeTranslation(0, 0, -100);
+    transform = CATransform3DRotate(transform, M_PI, 0, 1, 0);
+    [self addFace:5 withTransform:transform];
+}
+
+- (void)addFace:(NSInteger)index withTransform:(CATransform3D)transfrom {
+
+    UIView *view = self.faces[index];
+
+    [self.containerView addSubview:view];
+
+    view.center = self.containerView.center;
+
+    view.layer.transform = transfrom;
+    view.layer.borderWidth = 1.0f;
+}
+&lt;/code&gt;&lt;/pre&gt;</content>
+    
+    <summary type="html">
+    
+      &lt;h1 id=&quot;变换&quot;&gt;&lt;a href=&quot;#变换&quot; class=&quot;headerlink&quot; title=&quot;变换&quot;&gt;&lt;/a&gt;变换&lt;/h1&gt;&lt;h3 id=&quot;仿射变换&quot;&gt;&lt;a href=&quot;#仿射变换&quot; class=&quot;headerlink&quot; title=&quot;仿射变换&quot;&gt;&lt;/a&gt;仿射变换&lt;/h
+    
+    </summary>
+    
+      <category term="学习笔记" scheme="http://helly1024.github.io/categories/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/"/>
+    
+    
+      <category term="Core Animation" scheme="http://helly1024.github.io/tags/Core-Animation/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>iOS Core Animation Advanced Techniques学习笔记（4）</title>
+    <link href="http://helly1024.github.io/2015/08/10/iOS%20Core%20Animation%20Advanced%20Techniques%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%884%EF%BC%89/"/>
+    <id>http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（4）/</id>
+    <published>2015-08-10T02:11:49.000Z</published>
+    <updated>2015-08-10T11:34:32.000Z</updated>
+    
+    <content type="html">&lt;h1 id=&quot;隐式动画&quot;&gt;&lt;a href=&quot;#隐式动画&quot; class=&quot;headerlink&quot; title=&quot;隐式动画&quot;&gt;&lt;/a&gt;隐式动画&lt;/h1&gt;&lt;p&gt;在Core Animation中，屏幕上的任何东西都可以做动画，并且默认动画就是打开的。例如当改变CALayer的一个可做动画属性时，它并不是立即在屏幕上提现出来，而是从先前的值平滑地过渡到新的值，这就是&lt;strong&gt;隐式动画&lt;/strong&gt;。&lt;/p&gt;
+&lt;h3 id=&quot;事务&quot;&gt;&lt;a href=&quot;#事务&quot; class=&quot;headerlink&quot; title=&quot;事务&quot;&gt;&lt;/a&gt;事务&lt;/h3&gt;&lt;p&gt;在Core Animation中，动画执行的时间取决于当前事务的设置，动画类型取决于图层行为。&lt;/p&gt;
+&lt;p&gt;事务是Core Animation用来封装一系列属性动画集合的机制，任何用指定事务去改变可以做动画的图层属性都不会立刻发生变化，而是当事务提交的时候开始用一个动画过渡到新值。&lt;/p&gt;
+&lt;p&gt;事务是通过&lt;code&gt;CATransaction&lt;/code&gt;类来管理的，这个类没有属性或实例方法，也不能通过&lt;code&gt;+alloc&lt;/code&gt;和&lt;code&gt;-init&lt;/code&gt;方法来创建。但是&lt;code&gt;CATransaction&lt;/code&gt;可以通过类方法&lt;code&gt;+begin&lt;/code&gt;和&lt;code&gt;+commit&lt;/code&gt;将一个新的事务入栈或出栈当前的事务。&lt;/p&gt;
+&lt;p&gt;CALayer的任何一个可动画属性的值发生改变，都会添加到栈中顶层的事务当中。可以通过下列方法设置和获取当前事务动画的执行时间。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;// 设置
++ (void)setAnimationDuration:(CFTimeInterval)dur;
+
+// 获取
++ (CFTimeInterval)animationDuration;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;在UIView的基于block的动画方法：&lt;code&gt;+animateWithDuration:animations:&lt;/code&gt;中，CATransaction的&lt;code&gt;+begin&lt;/code&gt;和&lt;code&gt;+commit&lt;/code&gt;方法在&lt;code&gt;+animateWithDuration:animations:&lt;/code&gt;内部自动调用，这样block中所有属性的改变都会被事务所包含。&lt;/p&gt;
+&lt;h3 id=&quot;完成块&quot;&gt;&lt;a href=&quot;#完成块&quot; class=&quot;headerlink&quot; title=&quot;完成块&quot;&gt;&lt;/a&gt;完成块&lt;/h3&gt;&lt;p&gt;基于UIView的block的动画允许在动画结束的时候提供一个完成的动作。CATranscation接口提供的&lt;code&gt;+setCompletionBlock:&lt;/code&gt;方法也有同样的功能。&lt;/p&gt;
+&lt;p&gt;下面是在颜色变化动画完成后添加一个旋转90度的动画的示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (IBAction)changeColor
+{
+    //begin a new transaction
+    [CATransaction begin];
+
+    //set the animation duration to 1 second
+    [CATransaction setAnimationDuration:1.0];
+
+    //add the spin animation on completion
+    [CATransaction setCompletionBlock:^{
+        //rotate the layer 90 degrees
+        CGAffineTransform transform = self.colorLayer.affineTransform;
+        transform = CGAffineTransformRotate(transform, M_PI_2);
+        self.colorLayer.affineTransform = transform;
+    }];
+
+    //randomize the layer background color
+    CGFloat red = arc4random() / (CGFloat)INT_MAX;
+    CGFloat green = arc4random() / (CGFloat)INT_MAX;
+    CGFloat blue = arc4random() / (CGFloat)INT_MAX;
+    self.colorLayer.backgroundColor = [UIColor colorWithRed:red 
+                                                         green:green 
+                                                        blue:blue 
+                                                       alpha:1.0].CGColor;
+    //commit the transaction
+    [CATransaction commit];
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;因为完成块是在颜色渐变的事务提交并出栈之后才被执行，于是，用默认的事务做变换，所以动画时间也就变成了0.25秒。&lt;/p&gt;
+&lt;h3 id=&quot;图层行为&quot;&gt;&lt;a href=&quot;#图层行为&quot; class=&quot;headerlink&quot; title=&quot;图层行为&quot;&gt;&lt;/a&gt;图层行为&lt;/h3&gt;&lt;p&gt;当我们修改UIView关联的图层的可动画属性时会发现，隐式动画并没有生效，这是由于UIKit禁用掉了图层的隐式动画。为了弄明白UIView是如何做到这一点的，首先我们需要知道隐式动画是如何实现的：&lt;/p&gt;
+&lt;p&gt;我们把属性被修改时CALayer自动应用的动画称作行为。当CALayer的属性被修改时，它会调用&lt;code&gt;- (id&amp;lt;CAAction&amp;gt;)actionForKey:(NSString *)event&lt;/code&gt;,传递属性的名称作为参数来获取对应的行为。在这个方法中会执行如下几个步骤：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;首先检测CAlayer是否有delegate，并且是否实现了&lt;code&gt;CALayerDelegate&lt;/code&gt;协议中的&lt;code&gt;- (id&amp;lt;CAAction&amp;gt;)actionForLayer:(CALayer *)layer forKey:(NSString *)event&lt;/code&gt;。如果实现了，则直接调用这个方法得到行为。&lt;/li&gt;
+&lt;li&gt;如果CALayer没有delegate或者其delegate没有实现上述方法，则在CALayer的NSDictonary类型的&lt;code&gt;actions&lt;/code&gt;中查找是否有该属性名称对应因为的映射。&lt;/li&gt;
+&lt;li&gt;如果&lt;code&gt;actions&lt;/code&gt;中没有该属性名称对应行为的映射，那么接着在&lt;code&gt;style&lt;/code&gt;属性中查找是否有行为同该属性名称匹配。&lt;/li&gt;
+&lt;li&gt;如果&lt;code&gt;style&lt;/code&gt;中也没有，则会调用&lt;code&gt;+(id&amp;lt;CAAction&amp;gt;)defaultActionForKey:(NSString *)event;&lt;/code&gt;方法来获取属性预定义的标准行为。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;在执行完&lt;code&gt;-actionForKey:&lt;/code&gt;方法后，要么会返回nil（此时在属性值改变时将不会有动画），要么就返回一个符合&lt;code&gt;CAAction&lt;/code&gt;协议的对象（此时在属性值改变时就会有动画效果）。&lt;/p&gt;
+&lt;p&gt;这就解释了UIKit是如何禁用隐式动画的：每个UIView对它关联的图层都扮演了一个委托，并且提供了&lt;code&gt;-actionForLayer:forKey&lt;/code&gt;的实现方法。当更改UIView对象对应图层的属性的动作不是在一个UIView动画block中实现，UIView对所有图层行为返回nil，但是如果在动画block范围之内，它就返回了一个非空值。&lt;/p&gt;
+&lt;p&gt;除了可以在CALayer的代理方法&lt;code&gt;-actionForLayer:forKey&lt;/code&gt;中返回&lt;code&gt;nil&lt;/code&gt;来禁用隐式动画之外，还可以通过&lt;code&gt;CATransacition&lt;/code&gt;的类方法&lt;code&gt;+setDisableActions:&lt;/code&gt;来对所有属性启用或禁用隐式动画。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;总结：&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;UIView关联的图层禁用了隐式动画，对这种图层做动画的唯一办法就是使用UIView的动画函数（而不是依赖CATransaction），或者继承UIView，并覆盖&lt;code&gt;-actionForLayer:forKey:&lt;/code&gt;方法，或者直接创建一个显式动画。&lt;/li&gt;
+&lt;li&gt;对于单独存在的图层，我们可以通过实现图层的-actionForLayer:forKey:委托方法，或者提供一个actions字典来控制隐式动画。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;给&lt;code&gt;colorLayer&lt;/code&gt;设置一个自定义&lt;code&gt;actions&lt;/code&gt;字典代码片段：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;//add a custom action
+CATransition *transition = [CATransition animation];
+transition.type = kCATransitionPush;
+transition.subtype = kCATransitionFromLeft;
+self.colorLayer.actions = @{@&amp;quot;backgroundColor&amp;quot;: transition};
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;呈现与模型&quot;&gt;&lt;a href=&quot;#呈现与模型&quot; class=&quot;headerlink&quot; title=&quot;呈现与模型&quot;&gt;&lt;/a&gt;呈现与模型&lt;/h3&gt;&lt;p&gt;当一个图层的属性发生改变时，属性值确实立刻更新了，但是屏幕上并没有马上发生改变。这是因为新设置的属性值并没有直接调整图层的外观，相反，它只是定义了图层动画结束之后将要呈现的外观。&lt;/p&gt;
+&lt;p&gt;在CAlayer中，除了属性的值外，还有一个记录在隐式动画过程中显示在屏幕上属性的值，这个显示值被存储在一个叫做呈现图层的独立图层中。呈现图层实际上是模型图层的复制，但是它的属性值代表了在任何指定时刻当前外观效果。所以，与图层树相对应的，还存在着一个呈现树。&lt;/p&gt;
+&lt;p&gt;获取图层的呈现图层：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;self.colorLayer.presentationLayer;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;获取呈现图层对应的模型图层：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;self.colorLayer.presentationLayer.modelLayer;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;在大多数情况下，都不需要我们直接访问呈现图层，但是，两种情况下呈现图层会变得很有用，一个是同步动画，一个是处理用户交互。&lt;/p&gt;
+&lt;p&gt;使用presentationLayer图层来判断当前图层位置的示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@interface ViewController ()
+
+@property (nonatomic, strong) CALayer *colorLayer;
+
+@end
+
+@implementation ViewController
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+
+    //create a red layer
+    self.colorLayer = [CALayer layer];
+    self.colorLayer.frame = CGRectMake(0, 0, 100, 100);
+    self.colorLayer.position = CGPointMake(
+                                            self.view.bounds.size.width / 2,
+                                            self.view.bounds.size.height / 2
+                                            );
+    self.colorLayer.backgroundColor = [UIColor redColor].CGColor;
+    [self.view.layer addSublayer:self.colorLayer];
+}
+
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
+{
+    //get the touch point
+    CGPoint point = [[touches anyObject] locationInView:self.view];
+
+    //check if we&amp;apos;ve tapped the moving layer
+    if ([self.colorLayer.presentationLayer hitTest:point]) {
+        //randomize the layer background color
+        CGFloat red = arc4random() / (CGFloat)INT_MAX;
+        CGFloat green = arc4random() / (CGFloat)INT_MAX;
+        CGFloat blue = arc4random() / (CGFloat)INT_MAX;
+        self.colorLayer.backgroundColor = [UIColor colorWithRed:red green:green    blue:blue alpha:1.0].CGColor;
+    } else {
+        //otherwise (slowly) move the layer to new position
+        [CATransaction begin];
+        [CATransaction setAnimationDuration:4.0];
+        self.colorLayer.position = point;
+        [CATransaction commit];
+    }
+}
+
+@end
+&lt;/code&gt;&lt;/pre&gt;</content>
+    
+    <summary type="html">
+    
+      &lt;h1 id=&quot;隐式动画&quot;&gt;&lt;a href=&quot;#隐式动画&quot; class=&quot;headerlink&quot; title=&quot;隐式动画&quot;&gt;&lt;/a&gt;隐式动画&lt;/h1&gt;&lt;p&gt;在Core Animation中，屏幕上的任何东西都可以做动画，并且默认动画就是打开的。例如当改变CALayer的一个可做动
+    
+    </summary>
+    
+      <category term="学习笔记" scheme="http://helly1024.github.io/categories/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/"/>
+    
+    
+      <category term="Core Animation" scheme="http://helly1024.github.io/tags/Core-Animation/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>iOS Core Animation Advanced Techniques学习笔记（3）</title>
+    <link href="http://helly1024.github.io/2015/08/10/iOS%20Core%20Animation%20Advanced%20Techniques%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%883%EF%BC%89/"/>
+    <id>http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/</id>
+    <published>2015-08-10T02:10:51.000Z</published>
+    <updated>2015-08-10T11:34:01.000Z</updated>
+    
+    <content type="html">&lt;h1 id=&quot;专用图层&quot;&gt;&lt;a href=&quot;#专用图层&quot; class=&quot;headerlink&quot; title=&quot;专用图层&quot;&gt;&lt;/a&gt;专用图层&lt;/h1&gt;&lt;h3 id=&quot;CAShapeLayer&quot;&gt;&lt;a href=&quot;#CAShapeLayer&quot; class=&quot;headerlink&quot; title=&quot;CAShapeLayer&quot;&gt;&lt;/a&gt;CAShapeLayer&lt;/h3&gt;&lt;p&gt;CAShapeLayer的优点：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;不会出现像素化&lt;/li&gt;
+&lt;li&gt;不会被图层边界剪裁掉&lt;/li&gt;
+&lt;li&gt;渲染快速，使用了硬件加速&lt;/li&gt;
+&lt;li&gt;高效使用内存，不需要像普通CALayer一样创建一个寄宿图形&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;CAShapeLayer可以用来绘制所有能够通过CGPath来表示的形状。这个形状不一定要闭合，图层路径也不一定要不可破，事实上可以在一个图层上绘制好几个不同的形状。你可以控制一些属性比如lineWith（线宽，用点表示单位），lineCap（线条结尾的样子），和lineJoin（线条之间的结合点的样子）.但是在图层层面只有一次机会设置这些属性。如果想用不同颜色或风格来绘制多个形状，就必须每个形状准备一个图层了。&lt;/p&gt;
+&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@implementation ShapeLayerViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    // 绘制火柴人
+    UIBezierPath *path = [[UIBezierPath alloc] init];
+    [path moveToPoint:CGPointMake(174, 100)];              
+    [path addArcWithCenter:CGPointMake(150, 100)
+                    radius:25
+                    startAngle:0
+                    endAngle:2*M_PI
+                  clockwise:YES];
+
+    [path moveToPoint:CGPointMake(150, 125)];
+    [path addLineToPoint:CGPointMake(150, 175)];
+    [path addLineToPoint:CGPointMake(125, 225)];
+
+    [path moveToPoint:CGPointMake(150, 175)];
+    [path addLineToPoint:CGPointMake(175, 225)];
+
+    [path moveToPoint:CGPointMake(100, 145)];
+    [path addLineToPoint:CGPointMake(200, 145)];
+
+    CAShapeLayer *shapeLayer = [[CAShapeLayer alloc] init];
+    shapeLayer.strokeColor = [UIColor greenColor].CGColor;
+    shapeLayer.fillColor = [UIColor clearColor].CGColor;
+    shapeLayer.lineWidth = 5;
+    shapeLayer.lineJoin = kCALineJoinRound;
+
+    shapeLayer.path = path.CGPath;
+
+    [self.view.layer addSublayer:shapeLayer]; 
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;使用CAShapeLayer可以单独指定矩形的一个或多个角为圆角：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;CGRect rect = CGRectMake(50, 50, 100, 100);
+CGSize radii = CGSizeMake(20, 20);
+
+UIRectCorner corners = UIRectCornerTopLeft | UIRectCornerBottomRight;
+
+UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:rect 
+                                            byRoundingCorners:corners 
+                                                  cornerRadii:radii];
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;CATextLayer&quot;&gt;&lt;a href=&quot;#CATextLayer&quot; class=&quot;headerlink&quot; title=&quot;CATextLayer&quot;&gt;&lt;/a&gt;CATextLayer&lt;/h3&gt;&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    CATextLayer *layer = [CATextLayer layer];
+    layer.frame = self.view.bounds;
+    [self.view.layer addSublayer:layer];
+
+    layer.foregroundColor = [UIColor greenColor].CGColor;
+    layer.alignmentMode = kCAAlignmentCenter;
+    layer.wrapped = YES;
+
+    layer.contentsScale = [UIScreen mainScreen].scale;
+
+    UIFont *font = [UIFont systemFontOfSize:28.0f];
+
+    CFStringRef fontName = (__bridge CFStringRef)font.fontName;
+    CGFontRef fontRef = CGFontCreateWithFontName(fontName);
+    layer.font = fontRef;
+    layer.fontSize = font.pointSize;
+    CGFontRelease(fontRef);
+
+    NSString *text = @&amp;quot;Hellow World!&amp;quot;;
+
+    layer.string = text;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;h4 id=&quot;富文本&quot;&gt;&lt;a href=&quot;#富文本&quot; class=&quot;headerlink&quot; title=&quot;富文本&quot;&gt;&lt;/a&gt;富文本&lt;/h4&gt;&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;NSString *text = @&amp;quot;\n\n\n\nLorem ipsum dolor sit amet, consectetur adipiscing \n elit. Quisque massa arcu, eleifend vel varius in, facilisis pulvinar \n leo. Nunc quis nunc at mauris pharetra condimentum ut ac neque. Nunc \n elementum, libero ut porttitor dictum, diam odio congue lacus, vel \n fringilla sapien diam at purus. Etiam suscipit pretium nunc sit amet \n lobortis&amp;quot;;
+
+
+//create attributed string
+NSMutableAttributedString *string = nil;
+string = [[NSMutableAttributedString alloc] initWithString:text];
+
+//convert UIFont to a CTFont
+CFStringRef fontName = (__bridge CFStringRef)font.fontName;
+CGFloat fontSize = font.pointSize;
+CTFontRef fontRef = CTFontCreateWithName(fontName, fontSize, NULL);
+
+//set text attributes
+NSDictionary *attribs = @{
+                          (__bridge id)kCTForegroundColorAttributeName:(__bridge id)[UIColor blackColor].CGColor,
+                          (__bridge id)kCTFontAttributeName: (__bridge id)fontRef
+                          };
+
+[string setAttributes:attribs range:NSMakeRange(0, [text length])];
+attribs = @{
+            (__bridge id)kCTForegroundColorAttributeName: (__bridge id)[UIColor redColor].CGColor,
+            (__bridge id)kCTUnderlineStyleAttributeName: @(kCTUnderlineStyleSingle),
+            (__bridge id)kCTFontAttributeName: (__bridge id)fontRef
+            };
+[string setAttributes:attribs range:NSMakeRange(6, 5)];
+
+//release the CTFont we created earlier
+CFRelease(fontRef);
+
+//    layer.fontSize = font.pointSize;
+layer.string = string;
+&lt;/code&gt;&lt;/pre&gt;&lt;hr&gt;
+&lt;h3 id=&quot;CATransformLayer&quot;&gt;&lt;a href=&quot;#CATransformLayer&quot; class=&quot;headerlink&quot; title=&quot;CATransformLayer&quot;&gt;&lt;/a&gt;CATransformLayer&lt;/h3&gt;&lt;p&gt;通过&lt;code&gt;CATransformLayer&lt;/code&gt;我们可以在构造复杂的3D事物时，组织独立的元素，并且为每个元素添加不同的3D转换效果。&lt;/p&gt;
+&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@interface ViewController ()
+
+@property (nonatomic, weak) IBOutlet UIView *containerView;
+
+@end
+
+@implementation ViewController
+
+- (CALayer *)faceWithTransform:(CATransform3D)transform
+{
+  //create cube face layer
+  CALayer *face = [CALayer layer];
+  face.frame = CGRectMake(-50, -50, 100, 100);
+
+  //apply a random color
+  CGFloat red = (rand() / (double)INT_MAX);
+  CGFloat green = (rand() / (double)INT_MAX);
+  CGFloat blue = (rand() / (double)INT_MAX);
+  face.backgroundColor = [UIColor colorWithRed:red green:green blue:blue alpha:1.0].CGColor;
+
+  ￼//apply the transform and return
+  face.transform = transform;
+  return face;
+}
+
+- (CALayer *)cubeWithTransform:(CATransform3D)transform
+{
+  //create cube layer
+  CATransformLayer *cube = [CATransformLayer layer];
+
+  //add cube face 1
+  CATransform3D ct = CATransform3DMakeTranslation(0, 0, 50);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 2
+  ct = CATransform3DMakeTranslation(50, 0, 0);
+  ct = CATransform3DRotate(ct, M_PI_2, 0, 1, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 3
+  ct = CATransform3DMakeTranslation(0, -50, 0);
+  ct = CATransform3DRotate(ct, M_PI_2, 1, 0, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 4
+  ct = CATransform3DMakeTranslation(0, 50, 0);
+  ct = CATransform3DRotate(ct, -M_PI_2, 1, 0, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 5
+  ct = CATransform3DMakeTranslation(-50, 0, 0);
+  ct = CATransform3DRotate(ct, -M_PI_2, 0, 1, 
+  ct = CATransform3DRotate(ct, -M_PI_2, 0, 1, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 6
+  ct = CATransform3DMakeTranslation(0, 0, -50);
+  ct = CATransform3DRotate(ct, M_PI, 0, 1, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //center the cube layer within the container
+  CGSize containerSize = self.containerView.bounds.size;
+  cube.position = CGPointMake(containerSize.width / 2.0, containerSize.height / 2.0);
+
+  //apply the transform and return
+  cube.transform = transform;
+  return cube;
+}
+
+- (void)viewDidLoad
+{￼
+  [super viewDidLoad];
+
+  //set up the perspective transform
+  CATransform3D pt = CATransform3DIdentity;
+  pt.m34 = -1.0 / 500.0;
+  self.containerView.layer.sublayerTransform = pt;
+
+  //set up the transform for cube 1 and add it
+  CATransform3D c1t = CATransform3DIdentity;
+  c1t = CATransform3DTranslate(c1t, -100, 0, 0);
+  CALayer *cube1 = [self cubeWithTransform:c1t];
+  [self.containerView.layer addSublayer:cube1];
+
+  //set up the transform for cube 2 and add it
+  CATransform3D c2t = CATransform3DIdentity;
+  c2t = CATransform3DTranslate(c2t, 100, 0, 0);
+  c2t = CATransform3DRotate(c2t, -M_PI_4, 1, 0, 0);
+  c2t = CATransform3DRotate(c2t, -M_PI_4, 0, 1, 0);
+  CALayer *cube2 = [self cubeWithTransform:c2t];
+  [self.containerView.layer addSublayer:cube2];
+}
+@end
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;CAGradientLayer&quot;&gt;&lt;a href=&quot;#CAGradientLayer&quot; class=&quot;headerlink&quot; title=&quot;CAGradientLayer&quot;&gt;&lt;/a&gt;CAGradientLayer&lt;/h3&gt;&lt;p&gt;&lt;code&gt;CAGradientLayer&lt;/code&gt;是用来生成两种或更多颜色平滑渐变的。&lt;/p&gt;
+&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@implementation GradientLayerViewController
+
+- (void)viewDidLoad {
+
+    [super viewDidLoad];
+
+    CAGradientLayer *gradientLayer = [CAGradientLayer layer];
+
+    gradientLayer.frame = self.view.bounds;
+
+    // Set Colors
+    gradientLayer.colors = @[
+                             (__bridge id)[UIColor redColor].CGColor,
+                             (__bridge id)[UIColor blueColor].CGColor,
+                             (__bridge id)[UIColor grayColor].CGColor,
+                             (__bridge id)[UIColor greenColor].CGColor,
+                             (__bridge id)[UIColor cyanColor].CGColor,
+                             (__bridge id)[UIColor yellowColor].CGColor];
+
+    // Set the range of each color
+    gradientLayer.locations = @[@0, @0.2, @0.29, @0.38, @0.57, @1];
+
+    // Set the startPoint and endPoint
+    gradientLayer.startPoint = CGPointMake(0, 0);
+    gradientLayer.endPoint = CGPointMake(1, 1);
+
+    [self.view.layer addSublayer:gradientLayer];
+}
+
+
+@end
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;CAReplicatorLayer&quot;&gt;&lt;a href=&quot;#CAReplicatorLayer&quot; class=&quot;headerlink&quot; title=&quot;CAReplicatorLayer&quot;&gt;&lt;/a&gt;CAReplicatorLayer&lt;/h3&gt;&lt;p&gt;&lt;code&gt;CAReplicatorLayer&lt;/code&gt;的目的是为了高效生成许多相似的图层。它会绘制一个或多个图层的子图层，并在每个复制体上应用不同的变换。&lt;/p&gt;
+&lt;p&gt;重复图层示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@interface ViewController ()
+
+@property (nonatomic, weak) IBOutlet UIView *containerView;
+
+@end
+
+@implementation ViewController
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //create a replicator layer and add it to our view
+    CAReplicatorLayer *replicator = [CAReplicatorLayer layer];
+    replicator.frame = self.containerView.bounds;
+    [self.containerView.layer addSublayer:replicator];
+
+    //configure the replicator
+    replicator.instanceCount = 10;
+
+    //apply a transform for each instance
+    CATransform3D transform = CATransform3DIdentity;
+    transform = CATransform3DTranslate(transform, 0, 200, 0);
+    transform = CATransform3DRotate(transform, M_PI / 5.0, 0, 0, 1);
+    transform = CATransform3DTranslate(transform, 0, -200, 0);
+    replicator.instanceTransform = transform;
+
+    //apply a color shift for each instance
+    replicator.instanceBlueOffset = -0.1;
+    replicator.instanceGreenOffset = -0.1;
+
+    //create a sublayer and place it inside the replicator
+    CALayer *layer = [CALayer layer];
+    layer.frame = CGRectMake(100.0f, 100.0f, 100.0f, 100.0f);
+    layer.backgroundColor = [UIColor whiteColor].CGColor;
+    [replicator addSublayer:layer];
+}
+@end
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;带倒影效果的VIew示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;#import &amp;quot;ReflectionView.h&amp;quot;
+
+@implementation ReflectionView
+
++ (Class)layerClass
+{
+    return [CAReplicatorLayer class];
+}
+
+- (void)setUp
+{
+    //configure replicator
+    CAReplicatorLayer *layer = (CAReplicatorLayer *)self.layer;
+    layer.instanceCount = 2;
+
+    //move reflection instance below original and flip vertically
+    CATransform3D transform = CATransform3DIdentity;
+    CGFloat verticalOffset = self.bounds.size.height + 2;
+    transform = CATransform3DTranslate(transform, 0, verticalOffset, 0);
+    transform = CATransform3DScale(transform, 1, -1, 0);
+    layer.instanceTransform = transform;
+
+    //reduce alpha of reflection layer
+    layer.instanceAlphaOffset = -0.6;
+}
+￼
+- (id)initWithFrame:(CGRect)frame
+{
+    //this is called when view is created in code
+    if ((self = [super initWithFrame:frame])) {
+        [self setUp];
+    }
+    return self;
+}
+
+- (void)awakeFromNib
+{
+    //this is called when view is created from a nib
+    [self setUp];
+}
+@end
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;CAScrollLayer&quot;&gt;&lt;a href=&quot;#CAScrollLayer&quot; class=&quot;headerlink&quot; title=&quot;CAScrollLayer&quot;&gt;&lt;/a&gt;CAScrollLayer&lt;/h3&gt;&lt;p&gt;自动适应图层的bounds使图层上指定点得内容出现在图层原点：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;[(CAScrollLayer *)self.layer scrollToPoint:offset];
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;从图层树中查找并找到第一个可用的CAScrollLayer，然后滑动它使得指定点/矩形区域成为可视的：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)scrollPoint:(CGPoint)point;
+- (void)scrollRectToVisible:(CGRect)rect;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;通过&lt;code&gt;CAScrollLayer&lt;/code&gt;实现滑动视图代码清单：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;#import &amp;quot;ScrollView.h&amp;quot;
+@implementation ScrollView
++ (Class)layerClass
+{
+    return [CAScrollLayer class];
+}
+
+- (void)setUp
+{
+    //enable clipping
+    self.layer.masksToBounds = YES;
+
+    //attach pan gesture recognizer
+    UIPanGestureRecognizer *recognizer = nil;
+    recognizer = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)];
+    [self addGestureRecognizer:recognizer];
+}
+
+- (id)initWithFrame:(CGRect)frame
+{
+    //this is called when view is created in code
+    if ((self = [super initWithFrame:frame])) {
+        [self setUp];
+    }
+    return self;
+}
+
+- (void)awakeFromNib {
+    //this is called when view is created from a nib
+    [self setUp];
+}
+
+- (void)pan:(UIPanGestureRecognizer *)recognizer
+{
+    //get the offset by subtracting the pan gesture
+    //translation from the current bounds origin
+    CGPoint offset = self.bounds.origin;
+    offset.x -= [recognizer translationInView:self].x;
+    offset.y -= [recognizer translationInView:self].y;
+
+    //scroll the layer
+    [(CAScrollLayer *)self.layer scrollToPoint:offset];
+
+    //reset the pan gesture translation
+    [recognizer setTranslation:CGPointZero inView:self];
+}
+@end
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;AVPlayerLayer&quot;&gt;&lt;a href=&quot;#AVPlayerLayer&quot; class=&quot;headerlink&quot; title=&quot;AVPlayerLayer&quot;&gt;&lt;/a&gt;AVPlayerLayer&lt;/h3&gt;&lt;p&gt;示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //get video URL
+    NSURL *URL = [[NSBundle mainBundle] URLForResource:@&amp;quot;Ship&amp;quot; withExtension:@&amp;quot;mp4&amp;quot;];
+
+    //create player and player layer
+    AVPlayer *player = [AVPlayer playerWithURL:URL];
+    AVPlayerLayer *playerLayer = [AVPlayerLayer playerLayerWithPlayer:player];
+
+    //set player layer frame and attach it to our view
+    playerLayer.frame = self.containerView.bounds;
+    [self.containerView.layer addSublayer:playerLayer];
+
+    //play the video
+    [player play];
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;给视频增加变换，边框和圆角，示例代码：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)viewDidLoad
+{
+    ...
+    //set player layer frame and attach it to our view
+    playerLayer.frame = self.containerView.bounds;
+    [self.containerView.layer addSublayer:playerLayer];
+
+    //transform layer
+    CATransform3D transform = CATransform3DIdentity;
+    transform.m34 = -1.0 / 500.0;
+    transform = CATransform3DRotate(transform, M_PI_4, 1, 1, 0);
+    playerLayer.transform = transform;
+    ￼
+    //add rounded corners and border
+    playerLayer.masksToBounds = YES;
+    playerLayer.cornerRadius = 20.0;
+    playerLayer.borderColor = [UIColor redColor].CGColor;
+    playerLayer.borderWidth = 5.0;
+
+    //play the video
+    [player play];
+}
+&lt;/code&gt;&lt;/pre&gt;</content>
+    
+    <summary type="html">
+    
+      &lt;h1 id=&quot;专用图层&quot;&gt;&lt;a href=&quot;#专用图层&quot; class=&quot;headerlink&quot; title=&quot;专用图层&quot;&gt;&lt;/a&gt;专用图层&lt;/h1&gt;&lt;h3 id=&quot;CAShapeLayer&quot;&gt;&lt;a href=&quot;#CAShapeLayer&quot; class=&quot;headerlink&quot; 
+    
+    </summary>
+    
+      <category term="学习笔记" scheme="http://helly1024.github.io/categories/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/"/>
+    
+    
+      <category term="Core Animation" scheme="http://helly1024.github.io/tags/Core-Animation/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>iOS Core Animation Advanced Techniques学习笔记（1）</title>
+    <link href="http://helly1024.github.io/2015/08/10/iOS%20Core%20Animation%20Advanced%20Techniques%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%881%EF%BC%89/"/>
+    <id>http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（1）/</id>
+    <published>2015-08-10T02:08:53.000Z</published>
+    <updated>2015-08-10T11:32:32.000Z</updated>
+    
+    <content type="html">&lt;h1 id=&quot;图层树&quot;&gt;&lt;a href=&quot;#图层树&quot; class=&quot;headerlink&quot; title=&quot;图层树&quot;&gt;&lt;/a&gt;图层树&lt;/h1&gt;&lt;p&gt;Core Animation是一个复合引擎，它的职责是尽可能快地组合屏幕上不同的可视内容。这些内容被分解成独立的图层，存储在一个叫图层树的体系中。在屏幕上所看见的一切内容，在底层的实现其实就是一个或多个图层树。&lt;/p&gt;
+&lt;h3 id=&quot;图层与视图&quot;&gt;&lt;a href=&quot;#图层与视图&quot; class=&quot;headerlink&quot; title=&quot;图层与视图&quot;&gt;&lt;/a&gt;图层与视图&lt;/h3&gt;&lt;p&gt;真正现在屏幕上显示和做动画的并不是UIView，而是UIVIew所对应的一个CALayer实例（backing layer）。UIview的职责只是创建并管理这个layer，以确保当子视图在层级关系中添加或者被移除的时候，它们对应的图层也在图层树中有相应的操作。UIView仅仅是对CALayer的一个封装，它提供了对用户交互的处理和Core Animation底层方法的高级接口。&lt;/p&gt;
+&lt;p&gt;事实上除了&lt;strong&gt;视图层级&lt;/strong&gt;和&lt;strong&gt;图层树&lt;/strong&gt;之外，还存在&lt;strong&gt;呈现树&lt;/strong&gt;和&lt;strong&gt;渲染树&lt;/strong&gt;，它们每一个都扮演着不同的角色。&lt;/p&gt;
+&lt;h3 id=&quot;图层的能力&quot;&gt;&lt;a href=&quot;#图层的能力&quot; class=&quot;headerlink&quot; title=&quot;图层的能力&quot;&gt;&lt;/a&gt;图层的能力&lt;/h3&gt;&lt;ul&gt;
+&lt;li&gt;阴影，圆角，带颜色的边框&lt;/li&gt;
+&lt;li&gt;3D变换&lt;/li&gt;
+&lt;li&gt;非矩形范围&lt;/li&gt;
+&lt;li&gt;透明遮罩&lt;/li&gt;
+&lt;li&gt;多级非线性动画&lt;/li&gt;
+&lt;/ul&gt;
+&lt;hr&gt;
+&lt;h1 id=&quot;寄宿图&quot;&gt;&lt;a href=&quot;#寄宿图&quot; class=&quot;headerlink&quot; title=&quot;寄宿图&quot;&gt;&lt;/a&gt;寄宿图&lt;/h1&gt;&lt;h3 id=&quot;contents属性&quot;&gt;&lt;a href=&quot;#contents属性&quot; class=&quot;headerlink&quot; title=&quot;contents属性&quot;&gt;&lt;/a&gt;contents属性&lt;/h3&gt;&lt;p&gt;为layer添加一张寄宿图：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.contents = (__bridge id)image.CGImage;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;设置寄宿图显示模式：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.contentsGravity = kCAGravityResizeAspect;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;设置图片缩放比：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.contentsScale = [UIScreen mainScreen].scale;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;设置超出部分是否显示：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.masksToBounds = YES;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;设置图片显示区域：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.contentsRect = CGRectMake(0, 0, 0.5, 0.5);
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;设置固定边框和拉伸区域：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.contentsCenter = CGRectMake(0.25, 0.25, 0.5, 0.5);
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;自定义绘制&quot;&gt;&lt;a href=&quot;#自定义绘制&quot; class=&quot;headerlink&quot; title=&quot;自定义绘制&quot;&gt;&lt;/a&gt;自定义绘制&lt;/h3&gt;&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;实现UIView的&lt;code&gt;-drawRect:&lt;/code&gt;方法&lt;br&gt;当视图显示在屏幕上的时候&lt;code&gt;-drawRect:&lt;/code&gt;方法就会被调用，它当中的代码就会利用Core Graphics绘制一个寄宿图，然后内容将会缓存起来直到它需要被更新（开发者调用了&lt;code&gt;setNeedsDisplay&lt;/code&gt;方法，或者影响视图表象效果的属性被改变时，视图将会被自动重绘，如&lt;code&gt;bounds&lt;/code&gt;属性）。&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;实现CALayer的非正式协议&lt;code&gt;CALayerDelegate&lt;/code&gt;    &lt;/p&gt;
+&lt;p&gt; 当CALayer需要被重绘时，它会通过调用下面的方法来请求它的代理给它一个寄宿图来显示。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;(void)displayLayer:(CALayerCALayer *)layer;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt; 在上面的代理方法中，通过设置layer的contents属性，就可以设置一个寄宿图。如果代理没有实现&lt;code&gt;displayLayer&lt;/code&gt;方法，CALayer会转而尝试调用下面这个方法：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)ctx;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt; 在调用这个方法之前，CALayer创建了一个合适尺寸和空寄宿图（尺寸有bounds和contentsScale决定）和一个Core Graphics的绘制上下文环境，为绘制寄宿图做准备。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@implementation ViewController
+- (void)viewDidLoad
+{
+  [super viewDidLoad];
+  ￼
+  //create sublayer
+  CALayer *blueLayer = [CALayer layer];
+  blueLayer.frame = CGRectMake(50.0f, 50.0f, 100.0f, 100.0f);
+  blueLayer.backgroundColor = [UIColor blueColor].CGColor;
+
+  //set controller as layer delegate
+  blueLayer.delegate = self;
+
+  //ensure that layer backing image uses correct scale
+  blueLayer.contentsScale = [UIScreen mainScreen].scale; 
+
+  //add layer to our view
+  [self.layerView.layer addSublayer:blueLayer];
+
+  //force layer to redraw
+  [blueLayer display];
+}
+
+- (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)ctx
+{
+  //draw a thick red circle
+  CGContextSetLineWidth(ctx, 10.0f);
+  CGContextSetStrokeColorWithColor(ctx, [UIColor redColor].CGColor);
+  CGContextStrokeEllipseInRect(ctx, layer.bounds);
+}
+@end
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt; 需要注意的事情：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;当图层显示在屏幕上时，CALayer不会自动重绘它的内容，需要开发者显示调用&lt;code&gt;-display&lt;/code&gt;方法。&lt;/li&gt;
+&lt;li&gt;当使用CALayerDelegate绘制寄宿图时，不会对超出图层边界外的内容提供绘制支持。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;hr&gt;
+&lt;h1 id=&quot;图层几何学&quot;&gt;&lt;a href=&quot;#图层几何学&quot; class=&quot;headerlink&quot; title=&quot;图层几何学&quot;&gt;&lt;/a&gt;图层几何学&lt;/h1&gt;&lt;h3 id=&quot;布局&quot;&gt;&lt;a href=&quot;#布局&quot; class=&quot;headerlink&quot; title=&quot;布局&quot;&gt;&lt;/a&gt;布局&lt;/h3&gt;&lt;p&gt;与UIView的&lt;code&gt;center&lt;/code&gt;属性对应的是CALayer中的&lt;code&gt;position&lt;/code&gt;属性，他们都代表了相对于父图层&lt;code&gt;anchorPoint&lt;/code&gt;所在的位置。而不是视觉上所观察到的图层中心的位置，在&lt;code&gt;anchorPoint&lt;/code&gt;的值不为图层的中心时，&lt;code&gt;center&lt;/code&gt;和&lt;code&gt;position&lt;/code&gt;的值将会和视觉上图层中心点的值不一致。&lt;/p&gt;
+&lt;p&gt;对于视图和图层来说，&lt;code&gt;frame&lt;/code&gt;其实是一个虚拟的属性，是根据&lt;code&gt;bounds&lt;/code&gt;，&lt;code&gt;position&lt;/code&gt;和&lt;code&gt;transform&lt;/code&gt;计算而来，所以当其中任何一个值发生改变，&lt;code&gt;frame&lt;/code&gt;都会变化。相反，改变&lt;code&gt;frame&lt;/code&gt;的值同样会影响它们的值。&lt;/p&gt;
+&lt;p&gt;当对图层做变换的时候（如旋转/缩放），&lt;code&gt;frame&lt;/code&gt;实际上代表了在图层旋转之后整个轴对其的矩形区域。此时，&lt;code&gt;frame&lt;/code&gt;的宽高和&lt;code&gt;bounds&lt;/code&gt;的宽高并不一致。&lt;/p&gt;
+&lt;h3 id=&quot;锚点-anchorPoint&quot;&gt;&lt;a href=&quot;#锚点-anchorPoint&quot; class=&quot;headerlink&quot; title=&quot;锚点(anchorPoint)&quot;&gt;&lt;/a&gt;锚点(anchorPoint)&lt;/h3&gt;&lt;p&gt;图层的&lt;code&gt;anchorPoint&lt;/code&gt;属性可以看做是图层上一个不动的点，当图层进行旋转等操作的时候都是以此点为圆心进行的，类似于用一个钉子将纸钉在平面上，无论如何旋转，钉子的位置是不会动的。在默认情况下&lt;code&gt;anchorPoint&lt;/code&gt;位于图层的中心(0.5, 0.5)。&lt;/p&gt;
+&lt;h3 id=&quot;坐标系&quot;&gt;&lt;a href=&quot;#坐标系&quot; class=&quot;headerlink&quot; title=&quot;坐标系&quot;&gt;&lt;/a&gt;坐标系&lt;/h3&gt;&lt;p&gt;CALayer给不同坐标系之间的图层转换提供了一些工具类方法：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (CGPoint)convertPoint:(CGPoint)point fromLayer:(CALayer *)layer;
+- (CGPoint)convertPoint:(CGPoint)point toLayer:(CALayer *)layer;
+- (CGRect)convertRect:(CGRect)rect fromLayer:(CALayer *)layer;
+- (CGRect)convertRect:(CGRect)rect toLayer:(CALayer *)layer;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;这些方法可以把定义在一个图层坐标系下的点或者矩形转换成另一个图层坐标系下的点或者矩形。&lt;/p&gt;
+&lt;p&gt;垂直翻转子图层：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.geometryFlipped = YES;
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;Hit-Testing&quot;&gt;&lt;a href=&quot;#Hit-Testing&quot; class=&quot;headerlink&quot; title=&quot;Hit Testing&quot;&gt;&lt;/a&gt;Hit Testing&lt;/h3&gt;&lt;p&gt;判断触摸点是否在图层内：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;BOOL isContain = [layer containsPoint:point];
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;返回图层本身，或者包含这个坐标点的叶子节点图层：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;CALayer *layer = [layer hitTest:point];
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;自动布局&quot;&gt;&lt;a href=&quot;#自动布局&quot; class=&quot;headerlink&quot; title=&quot;自动布局&quot;&gt;&lt;/a&gt;自动布局&lt;/h3&gt;&lt;p&gt;当使用视图的时候，可以充分利用UIView类接口暴露出来的UIViewAutoresizingMask和NSLayoutConstraintAPI，但如果想随意控制CALayer的布局，就需要手工操作。&lt;/p&gt;
+&lt;p&gt;图层手动布局：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;- (void)layoutSublayersOfLayer:(CALayer *)layer;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;当图层的bounds发生改变，或者图层的-setNeedsLayout方法被调用的时候，这个函数将会被执行。这使得我们可以手动地重新摆放或者重新调整子图层的大小，但是不能像UIView的autoresizingMask和constraints属性做到自适应屏幕旋转。&lt;/p&gt;
+&lt;hr&gt;
+&lt;h1 id=&quot;视觉效果&quot;&gt;&lt;a href=&quot;#视觉效果&quot; class=&quot;headerlink&quot; title=&quot;视觉效果&quot;&gt;&lt;/a&gt;视觉效果&lt;/h1&gt;&lt;h3 id=&quot;圆角&quot;&gt;&lt;a href=&quot;#圆角&quot; class=&quot;headerlink&quot; title=&quot;圆角&quot;&gt;&lt;/a&gt;圆角&lt;/h3&gt;&lt;p&gt;设置图层角曲率（默认为0）：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.conrnerRadius = 5.0f
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;图层边框&quot;&gt;&lt;a href=&quot;#图层边框&quot; class=&quot;headerlink&quot; title=&quot;图层边框&quot;&gt;&lt;/a&gt;图层边框&lt;/h3&gt;&lt;p&gt;设置图层边框宽度和颜色：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.borderWidth = 3.0f;
+layer.borderColor = [UIColor greenColor].CGColor;
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;阴影&quot;&gt;&lt;a href=&quot;#阴影&quot; class=&quot;headerlink&quot; title=&quot;阴影&quot;&gt;&lt;/a&gt;阴影&lt;/h3&gt;&lt;p&gt;设置图层阴影颜色，方向和距离，模糊度&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.shadowColor = [UIColor orangeColor].CGColor;
+layer.shadowOffset = CGSizeMake(50, 50);
+layer.shadowRadius = 10;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;当图层的&lt;code&gt;masksToBounds&lt;/code&gt;属性值设置为&lt;code&gt;YES&lt;/code&gt;时，所有从图层中突出来的内容都会被剪裁掉。因此阴影效果将会失效。想要为这样的图层添加阴影，就需要在要添加阴影的图层范围上覆盖一个只画阴影的空图层。&lt;/p&gt;
+&lt;p&gt;使用&lt;code&gt;shadowPath&lt;/code&gt;指定任意形状的阴影：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;@interface ViewController ()
+
+@property (nonatomic, weak) IBOutlet UIView *layerView1;
+@property (nonatomic, weak) IBOutlet UIView *layerView2;
+@end
+
+@implementation ViewController
+
+- (void)viewDidLoad
+{
+  [super viewDidLoad];
+
+  //enable layer shadows
+  self.layerView1.layer.shadowOpacity = 0.5f;
+  self.layerView2.layer.shadowOpacity = 0.5f;
+
+  //create a square shadow
+  CGMutablePathRef squarePath = CGPathCreateMutable();
+  CGPathAddRect(squarePath, NULL, self.layerView1.bounds);
+  self.layerView1.layer.shadowPath = squarePath; CGPathRelease(squarePath);
+
+  ￼//create a circular shadow
+  CGMutablePathRef circlePath = CGPathCreateMutable();
+  CGPathAddEllipseInRect(circlePath, NULL, self.layerView2.bounds);
+  self.layerView2.layer.shadowPath = circlePath; CGPathRelease(circlePath);
+}
+@end
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;图层蒙版&quot;&gt;&lt;a href=&quot;#图层蒙版&quot; class=&quot;headerlink&quot; title=&quot;图层蒙版&quot;&gt;&lt;/a&gt;图层蒙版&lt;/h3&gt;&lt;p&gt;设置图层蒙版：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;//create mask layer
+CALayer *maskLayer = [CALayer layer];
+maskLayer.frame = self.layerView.bounds;
+UIImage *maskImage = [UIImage imageNamed:@&amp;quot;Cone.png&amp;quot;];
+maskLayer.contents = (__bridge id)maskImage.CGImage;
+
+//apply mask to image layer￼
+self.imageView.layer.mask = maskLayer;
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;拉伸过滤&quot;&gt;&lt;a href=&quot;#拉伸过滤&quot; class=&quot;headerlink&quot; title=&quot;拉伸过滤&quot;&gt;&lt;/a&gt;拉伸过滤&lt;/h3&gt;&lt;p&gt;设置图层拉伸过滤算法：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;view.layer.magnificationFilter = kCAFilterNearest;
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id=&quot;透明度&quot;&gt;&lt;a href=&quot;#透明度&quot; class=&quot;headerlink&quot; title=&quot;透明度&quot;&gt;&lt;/a&gt;透明度&lt;/h3&gt;&lt;p&gt;&lt;strong&gt;透明度混合叠加问题：&lt;/strong&gt;当现实一个透明度为50%的图层时，图层的每个像素都会一半现实自己的颜色，另一半显示图层下面的颜色。当图层包含一个同样50%透明的子图层时，所看到的视图，50%来自子视图，25%来自图层本身的颜色，另外25%则来自背景色。这时子视图的可见的则为75%，显示效果将会相当糟糕。&lt;/p&gt;
+&lt;p&gt; 理想状态下，设置一个图层的透明度，是希望它所包含的图层树向一个整体一样的透明效果。这可以通过设置Info.plist文件中的UIViewGroupOpacity为YES来达到这个效果，但是这个设置会影响到这个应用，整个app可能会受到不良影响。&lt;/p&gt;
+&lt;p&gt;另一个方法就是设置CALayer的一个叫做shouldRasterize属性来实现组透明的效果，如果它被设置为YES，在应用透明度实现之前，图层及其子图层都会被整合成一个整体的图片，这样就没有透明度混合的问题了。&lt;/p&gt;
+&lt;p&gt;为了启用shouldRasterize属性，需要图层的rasterizationScale属性。默认情况下，所有图层拉伸都是1.0， 所以如果使用了shouldRasterize属性，就要确保你设置了rasterizationScale属性去匹配屏幕，以防止出现Retina屏幕像素化的问题。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;layer.shouldRasterize = YES;
+layer.rasterizationScale = [UIScreen mainScreen].scale;
+&lt;/code&gt;&lt;/pre&gt;</content>
+    
+    <summary type="html">
+    
+      &lt;h1 id=&quot;图层树&quot;&gt;&lt;a href=&quot;#图层树&quot; class=&quot;headerlink&quot; title=&quot;图层树&quot;&gt;&lt;/a&gt;图层树&lt;/h1&gt;&lt;p&gt;Core Animation是一个复合引擎，它的职责是尽可能快地组合屏幕上不同的可视内容。这些内容被分解成独立的图层，存储在一个叫图
+    
+    </summary>
+    
+      <category term="学习笔记" scheme="http://helly1024.github.io/categories/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/"/>
+    
+    
+      <category term="Core Animation" scheme="http://helly1024.github.io/tags/Core-Animation/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>JSONModel源码阅读笔记（1）</title>
+    <link href="http://helly1024.github.io/2015/03/31/2015-04-01-JSONModel%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB%E7%AC%94%E8%AE%B0%EF%BC%881%EF%BC%89/"/>
+    <id>http://helly1024.github.io/2015/03/31/2015-04-01-JSONModel源码阅读笔记（1）/</id>
+    <published>2015-03-30T16:30:13.000Z</published>
+    <updated>2015-08-10T06:16:26.000Z</updated>
+    
+    <content type="html">&lt;p&gt;JSONMedel是一个强大、易用的开源json解析库。使用时只需要按照服务器返回的json数据的结构来构建一个JSONModel的子类，就可以通过调用父类的&lt;code&gt;-(id)initWithDictionary:(NSDictionary*)dict error:(NSError**)err&lt;/code&gt;方法实现将json转换为model。&lt;/p&gt;
+&lt;p&gt;下面来看看JSONModel是如何实现这一神奇效果的。&lt;/p&gt;
+&lt;p&gt;在&lt;code&gt;-(id)initWithDictionary:(NSDictionary*)dict error:(NSError**)err&lt;/code&gt;方法中首先执行的代码是&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;//check for nil input
+if (!dict) {
+    if (err) *err = [JSONModelError errorInputIsNil];
+    return nil;
+}
+
+//invalid input, just create empty instance
+if (![dict isKindOfClass:[NSDictionary class]]) {
+    if (err) *err = [JSONModelError errorInvalidDataWithMessage:@&amp;quot;Attempt to initialize JSONModel object using initWithDictionary:error: but the dictionary parameter was not an &amp;apos;NSDictionary&amp;apos;.&amp;quot;];
+    return nil;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;这段代码对参数dict进行非空和类型检查，如果发生错误则通过另一个参数NSError类型的指针err返回错误信息。&lt;/p&gt;
+&lt;p&gt;接下来是&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;//create a class instance
+self = [self init];
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;通过查看&lt;code&gt;init&lt;/code&gt;方法的内部实现可以发现，JSONModel的中获取model的属性的核心代码就在其中，它内部的调用顺序是&lt;code&gt;init&lt;/code&gt;–&amp;gt;&lt;code&gt;__setup__&lt;/code&gt;–&amp;gt;&lt;code&gt;__inspectProperties&lt;/code&gt;。下面将详细对每一个方法进行分析：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;-(id)init
+{
+    self = [super init];
+    if (self) {
+    //do initial class setup
+    [self __setup__];
+    }
+    return self;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;&lt;code&gt;init&lt;/code&gt;方法比较简单，在此不再赘述。接下来是&lt;code&gt;__setup__&lt;/code&gt;，它的内部实现如下：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;-(void)__setup__
+{
+    //if first instance of this model, generate the property list
+    if (!objc_getAssociatedObject(self.class, &amp;amp;kClassPropertiesKey)) {
+        [self __inspectProperties];
+    }
+
+    //if there&amp;apos;s a custom key mapper, store it in the associated object
+    id mapper = [[self class] keyMapper];
+    if ( mapper &amp;amp;&amp;amp; !objc_getAssociatedObject(self.class, &amp;amp;kMapperObjectKey) ) {
+        objc_setAssociatedObject(
+                                 self.class,
+                                 &amp;amp;kMapperObjectKey,
+                                 mapper,
+                                 OBJC_ASSOCIATION_RETAIN // This is atomic
+                                 );
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;首先通过OC的Runtime中的Associative机制来通过key&lt;code&gt;kClassPropertiesKey&lt;/code&gt;获取property list来判断是否已经存在这个model的property list。如果存在着说明之前已经调用过&lt;code&gt;-(id)initWithDictionary:(NSDictionary*)dict error:(NSError**)err&lt;/code&gt;方法并生成了model得property list。如果不存在则调用&lt;code&gt;__inspectProperties&lt;/code&gt;方法生成model的property list。后面的代码的主要作用是当服务器返回的json数据中的key与model中创建的property不一致时进行映射。不是今天我们要讨论的重点，因此不做过多的关注。下面将进入&lt;code&gt;__inspectProperties&lt;/code&gt;方法中继续分析。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;//inspects the class, get&amp;apos;s a list of the class properties
+-(void)__inspectProperties
+{
+    //JMLog(@&amp;quot;Inspect class: %@&amp;quot;, [self class]);
+
+    NSMutableDictionary* propertyIndex = [NSMutableDictionary dictionary];
+
+    //temp variables for the loops
+    Class class = [self class];
+    NSScanner* scanner = nil;
+    NSString* propertyType = nil;
+
+    // inspect inherited properties up to the JSONModel class
+    while (class != [JSONModel class]) {
+        //JMLog(@&amp;quot;inspecting: %@&amp;quot;, NSStringFromClass(class));
+
+        unsigned int propertyCount;
+        objc_property_t *properties = class_copyPropertyList(class, &amp;amp;propertyCount);
+
+        //loop over the class properties
+        for (unsigned int i = 0; i &amp;lt; propertyCount; i++) {
+
+            JSONModelClassProperty* p = [[JSONModelClassProperty alloc] init];
+
+            //get property name
+            objc_property_t property = properties[i];
+            const char *propertyName = property_getName(property);
+            p.name = @(propertyName);
+
+            //JMLog(@&amp;quot;property: %@&amp;quot;, p.name);
+
+            //get property attributes
+            const char *attrs = property_getAttributes(property);
+            NSString* propertyAttributes = @(attrs);
+            NSArray* attributeItems = [propertyAttributes componentsSeparatedByString:@&amp;quot;,&amp;quot;];
+
+            //ignore read-only properties
+            if ([attributeItems containsObject:@&amp;quot;R&amp;quot;]) {
+                continue; //to next property
+            }
+
+            //check for 64b BOOLs
+            if ([propertyAttributes hasPrefix:@&amp;quot;Tc,&amp;quot;]) {
+                //mask BOOLs as structs so they can have custom convertors
+                p.structName = @&amp;quot;BOOL&amp;quot;;
+            }
+
+            scanner = [NSScanner scannerWithString: propertyAttributes];
+
+            //JMLog(@&amp;quot;attr: %@&amp;quot;, [NSString stringWithCString:attrs encoding:NSUTF8StringEncoding]);
+            [scanner scanUpToString:@&amp;quot;T&amp;quot; intoString: nil];
+            [scanner scanString:@&amp;quot;T&amp;quot; intoString:nil];
+
+            //check if the property is an instance of a class
+            if ([scanner scanString:@&amp;quot;@\&amp;quot;&amp;quot; intoString: &amp;amp;propertyType]) {
+
+                [scanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:@&amp;quot;\&amp;quot;&amp;lt;&amp;quot;]
+                                        intoString:&amp;amp;propertyType];
+
+                //JMLog(@&amp;quot;type: %@&amp;quot;, propertyClassName);
+                p.type = NSClassFromString(propertyType);
+                p.isMutable = ([propertyType rangeOfString:@&amp;quot;Mutable&amp;quot;].location != NSNotFound);
+                p.isStandardJSONType = [allowedJSONTypes containsObject:p.type];
+
+                //read through the property protocols
+                while ([scanner scanString:@&amp;quot;&amp;lt;&amp;quot; intoString:NULL]) {
+
+                    NSString* protocolName = nil;
+
+                    [scanner scanUpToString:@&amp;quot;&amp;gt;&amp;quot; intoString: &amp;amp;protocolName];
+
+                    if ([protocolName isEqualToString:@&amp;quot;Optional&amp;quot;]) {
+                        p.isOptional = YES;
+                    } else if([protocolName isEqualToString:@&amp;quot;Index&amp;quot;]) {
+                        p.isIndex = YES;
+                        objc_setAssociatedObject(
+                                                 self.class,
+                                                 &amp;amp;kIndexPropertyNameKey,
+                                                 p.name,
+                                                 OBJC_ASSOCIATION_RETAIN // This is atomic
+                                                 );
+                    } else if([protocolName isEqualToString:@&amp;quot;ConvertOnDemand&amp;quot;]) {
+                        p.convertsOnDemand = YES;
+                    } else if([protocolName isEqualToString:@&amp;quot;Ignore&amp;quot;]) {
+                        p = nil;
+                    } else {
+                        p.protocol = protocolName;
+                    }
+
+                    [scanner scanString:@&amp;quot;&amp;gt;&amp;quot; intoString:NULL];
+                }
+
+            }
+            //check if the property is a structure
+            else if ([scanner scanString:@&amp;quot;{&amp;quot; intoString: &amp;amp;propertyType]) {
+                [scanner scanCharactersFromSet:[NSCharacterSet alphanumericCharacterSet]
+                                    intoString:&amp;amp;propertyType];
+
+                p.isStandardJSONType = NO;
+                p.structName = propertyType;
+
+            }
+            //the property must be a primitive
+            else {
+
+                //the property contains a primitive data type
+                [scanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:@&amp;quot;,&amp;quot;]
+                                        intoString:&amp;amp;propertyType];
+
+                //get the full name of the primitive type
+                propertyType = valueTransformer.primitivesNames[propertyType];
+
+                if (![allowedPrimitiveTypes containsObject:propertyType]) {
+
+                    //type not allowed - programmer mistaked -&amp;gt; exception
+                    @throw [NSException exceptionWithName:@&amp;quot;JSONModelProperty type not allowed&amp;quot;
+                                                   reason:[NSString stringWithFormat:@&amp;quot;Property type of %@.%@ is not supported by JSONModel.&amp;quot;, self.class, p.name]
+                                                 userInfo:nil];
+                }
+
+            }
+
+            NSString *nsPropertyName = @(propertyName);
+            if([[self class] propertyIsOptional:nsPropertyName]){
+                p.isOptional = YES;
+            }
+
+            if([[self class] propertyIsIgnored:nsPropertyName]){
+                p = nil;
+            }
+
+            //few cases where JSONModel will ignore properties automatically
+            if ([propertyType isEqualToString:@&amp;quot;Block&amp;quot;]) {
+                p = nil;
+            }
+
+            //add the property object to the temp index
+            if (p &amp;amp;&amp;amp; ![propertyIndex objectForKey:p.name]) {
+                [propertyIndex setValue:p forKey:p.name];
+            }
+        }
+
+        free(properties);
+
+        //ascend to the super of the class
+        //(will do that until it reaches the root class - JSONModel)
+        class = [class superclass];
+    }
+
+    //finally store the property index in the static property index
+    objc_setAssociatedObject(
+                             self.class,
+                             &amp;amp;kClassPropertiesKey,
+                             [propertyIndex copy],
+                             OBJC_ASSOCIATION_RETAIN // This is atomic
+                             );
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;这段代码是JSONModel中的核心代码，它的主要功能是利用OC的Runtime机制获取model和property list，并利用&lt;code&gt;JSONModelClassProperty&lt;/code&gt;类对每个property的特性（如名称、类型等信息）进行封装。最后将所有的property存入可变字典&lt;code&gt;propertyIndex&lt;/code&gt;当中，并利用Associative机制将&lt;code&gt;propertyIndex&lt;/code&gt;与model关联。&lt;/p&gt;
+&lt;p&gt;首先初始化用来存储property的可变字典&lt;code&gt;propertyIndex&lt;/code&gt;和在下面的循环中需要用到的变量。&lt;/p&gt;
+&lt;p&gt;接下来是通过比较model的类名和根类JSONModel的类名是否相同来控制while循环的执行。while循环的主要作用是在这个model并不是JSONModel的子类而是其子类的子类（……的子类）的情况下确保获取到该类所有的property（关键代码&lt;code&gt;class = [class superclass];&lt;/code&gt;）。&lt;/p&gt;
+&lt;p&gt;下面肉戏来了！在while循环中，通过&lt;code&gt;class_copyPropertyList&lt;/code&gt;方法获取到了model或者其父类（……父类的父类）的property list。然后对property list进行遍历，对每一个property进行封装。&lt;/p&gt;
+&lt;p&gt;在对property list进行遍历的for循环中，首先初始化了用来对每个property的信息进行封装的类&lt;code&gt;JSONModelClassProperty&lt;/code&gt;的实例&lt;code&gt;p&lt;/code&gt;（此类的具体信息参见&lt;code&gt;JSONModelClassProperty.h&lt;/code&gt;在此不做赘述）。然后通过Runtime的&lt;code&gt;property_getName&lt;/code&gt;获取该property的name并存储在p的属性name中。再通过&lt;code&gt;property_getAttributes&lt;/code&gt;获取该property的attributes。通过该方法获取到的attributes是以类似于&lt;code&gt;T@\&amp;quot;NSNumber\&amp;quot;,&amp;amp;,N,V_ID&lt;/code&gt;的字符串来表示的，其中包含了property的类型、是否可变、是否为只读、是否是一个结构体，是否为可选、是否是一个block和是否为原始数据类型等信息，之后的代码都是对这些信息的判断并将其储存到&lt;code&gt;JSONModelClassProperty&lt;/code&gt;类的实例&lt;code&gt;p&lt;/code&gt;的相应属性当中。值得一提的是作者巧妙地利用了&lt;code&gt;NSScanner&lt;/code&gt;类对这些信息进行判断。&lt;/p&gt;
+&lt;p&gt;在for循环的最后再以property的name为key将实例&lt;code&gt;p&lt;/code&gt;存入&lt;code&gt;propertyIndex&lt;/code&gt;当中,然后在while循环完成后通过&lt;code&gt;objc_setAssociatedObject&lt;/code&gt;将&lt;code&gt;propertyIndex&lt;/code&gt;关联到kClassPropertiesKey。如此就获取到该model类的所有property。&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;JSONMedel是一个强大、易用的开源json解析库。使用时只需要按照服务器返回的json数据的结构来构建一个JSONModel的子类，就可以通过调用父类的&lt;code&gt;-(id)initWithDictionary:(NSDictionary*)dict error:(N
+    
+    </summary>
+    
+      <category term="源码阅读" scheme="http://helly1024.github.io/categories/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/"/>
+    
+    
+      <category term="JSON解析" scheme="http://helly1024.github.io/tags/JSON%E8%A7%A3%E6%9E%90/"/>
+    
+  </entry>
+  
+</feed>

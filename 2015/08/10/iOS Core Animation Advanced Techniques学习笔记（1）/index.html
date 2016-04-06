@@ -1,0 +1,442 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>iOS Core Animation Advanced Techniques学习笔记（1） | Helly的技术博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="图层树Core Animation是一个复合引擎，它的职责是尽可能快地组合屏幕上不同的可视内容。这些内容被分解成独立的图层，存储在一个叫图层树的体系中。在屏幕上所看见的一切内容，在底层的实现其实就是一个或多个图层树。
+图层与视图真正现在屏幕上显示和做动画的并不是UIView，而是UIVIew所对应的一个CALayer实例（backing layer）。UIview的职责只是创建并管理这个layer">
+<meta property="og:type" content="article">
+<meta property="og:title" content="iOS Core Animation Advanced Techniques学习笔记（1）">
+<meta property="og:url" content="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（1）/index.html">
+<meta property="og:site_name" content="Helly的技术博客">
+<meta property="og:description" content="图层树Core Animation是一个复合引擎，它的职责是尽可能快地组合屏幕上不同的可视内容。这些内容被分解成独立的图层，存储在一个叫图层树的体系中。在屏幕上所看见的一切内容，在底层的实现其实就是一个或多个图层树。
+图层与视图真正现在屏幕上显示和做动画的并不是UIView，而是UIVIew所对应的一个CALayer实例（backing layer）。UIview的职责只是创建并管理这个layer">
+<meta property="og:updated_time" content="2015-08-10T11:32:32.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="iOS Core Animation Advanced Techniques学习笔记（1）">
+<meta name="twitter:description" content="图层树Core Animation是一个复合引擎，它的职责是尽可能快地组合屏幕上不同的可视内容。这些内容被分解成独立的图层，存储在一个叫图层树的体系中。在屏幕上所看见的一切内容，在底层的实现其实就是一个或多个图层树。
+图层与视图真正现在屏幕上显示和做动画的并不是UIView，而是UIVIew所对应的一个CALayer实例（backing layer）。UIview的职责只是创建并管理这个layer">
+  
+    <link rel="alternative" href="/atom.xml" title="Helly的技术博客" type="application/atom+xml">
+  
+  
+    <link rel="icon" href="/favicon.ico">
+  
+  <link rel="stylesheet" href="/css/style.css">
+  <!--[if lt IE 9]><script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7/html5shiv.min.js"></script><![endif]-->
+  
+</head>
+<body>
+<div id="container">
+  <div id="wrap">
+    <link href="favicon.ico" type="image/x-icon" rel="icon"/>
+<header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Helly的技术博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">纸上得来终觉浅，绝知此事要躬行。</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">首页</a>
+        
+          <a class="main-nav-link" href="/archives">归档</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+          <a id="nav-rss-link" class="nav-icon" href="/atom.xml" title="RSS Feed"></a>
+        
+        <a id="nav-search-btn" class="nav-icon" title="Search"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="http://www.baidu.com/baidu" method="get" accept-charset="utf-8" class="search-form">
+          <input type="search" name="word" maxlength="20" class="search-form-input" placeholder="Search">
+          <input type="submit" value="" class="search-form-submit">
+          <input name=tn type=hidden value="bds">
+          <input name=cl type=hidden value="3">
+          <input name=ct type=hidden value="2097152">
+          <input type="hidden" name="si" value="helly1024.github.io">
+        </form>
+      </div>
+    </div>
+  </div>
+</header>
+    <div class="outer">
+      <section id="main"><article id="post-iOS Core Animation Advanced Techniques学习笔记（1）" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（1）/" class="article-date">
+  <time datetime="2015-08-10T02:08:53.000Z" itemprop="datePublished">2015-08-10</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/学习笔记/">学习笔记</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="article-title" itemprop="name">
+      iOS Core Animation Advanced Techniques学习笔记（1）
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <h1 id="图层树"><a href="#图层树" class="headerlink" title="图层树"></a>图层树</h1><p>Core Animation是一个复合引擎，它的职责是尽可能快地组合屏幕上不同的可视内容。这些内容被分解成独立的图层，存储在一个叫图层树的体系中。在屏幕上所看见的一切内容，在底层的实现其实就是一个或多个图层树。</p>
+<h3 id="图层与视图"><a href="#图层与视图" class="headerlink" title="图层与视图"></a>图层与视图</h3><p>真正现在屏幕上显示和做动画的并不是UIView，而是UIVIew所对应的一个CALayer实例（backing layer）。UIview的职责只是创建并管理这个layer，以确保当子视图在层级关系中添加或者被移除的时候，它们对应的图层也在图层树中有相应的操作。UIView仅仅是对CALayer的一个封装，它提供了对用户交互的处理和Core Animation底层方法的高级接口。</p>
+<p>事实上除了<strong>视图层级</strong>和<strong>图层树</strong>之外，还存在<strong>呈现树</strong>和<strong>渲染树</strong>，它们每一个都扮演着不同的角色。</p>
+<h3 id="图层的能力"><a href="#图层的能力" class="headerlink" title="图层的能力"></a>图层的能力</h3><ul>
+<li>阴影，圆角，带颜色的边框</li>
+<li>3D变换</li>
+<li>非矩形范围</li>
+<li>透明遮罩</li>
+<li>多级非线性动画</li>
+</ul>
+<hr>
+<h1 id="寄宿图"><a href="#寄宿图" class="headerlink" title="寄宿图"></a>寄宿图</h1><h3 id="contents属性"><a href="#contents属性" class="headerlink" title="contents属性"></a>contents属性</h3><p>为layer添加一张寄宿图：</p>
+<pre><code>layer.contents = (__bridge id)image.CGImage;
+</code></pre><p>设置寄宿图显示模式：</p>
+<pre><code>layer.contentsGravity = kCAGravityResizeAspect;
+</code></pre><p>设置图片缩放比：</p>
+<pre><code>layer.contentsScale = [UIScreen mainScreen].scale;
+</code></pre><p>设置超出部分是否显示：</p>
+<pre><code>layer.masksToBounds = YES;
+</code></pre><p>设置图片显示区域：</p>
+<pre><code>layer.contentsRect = CGRectMake(0, 0, 0.5, 0.5);
+</code></pre><p>设置固定边框和拉伸区域：</p>
+<pre><code>layer.contentsCenter = CGRectMake(0.25, 0.25, 0.5, 0.5);
+</code></pre><h3 id="自定义绘制"><a href="#自定义绘制" class="headerlink" title="自定义绘制"></a>自定义绘制</h3><ol>
+<li><p>实现UIView的<code>-drawRect:</code>方法<br>当视图显示在屏幕上的时候<code>-drawRect:</code>方法就会被调用，它当中的代码就会利用Core Graphics绘制一个寄宿图，然后内容将会缓存起来直到它需要被更新（开发者调用了<code>setNeedsDisplay</code>方法，或者影响视图表象效果的属性被改变时，视图将会被自动重绘，如<code>bounds</code>属性）。</p>
+</li>
+<li><p>实现CALayer的非正式协议<code>CALayerDelegate</code>    </p>
+<p> 当CALayer需要被重绘时，它会通过调用下面的方法来请求它的代理给它一个寄宿图来显示。</p>
+<pre><code>(void)displayLayer:(CALayerCALayer *)layer;
+</code></pre><p> 在上面的代理方法中，通过设置layer的contents属性，就可以设置一个寄宿图。如果代理没有实现<code>displayLayer</code>方法，CALayer会转而尝试调用下面这个方法：</p>
+<pre><code>- (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)ctx;
+</code></pre><p> 在调用这个方法之前，CALayer创建了一个合适尺寸和空寄宿图（尺寸有bounds和contentsScale决定）和一个Core Graphics的绘制上下文环境，为绘制寄宿图做准备。</p>
+<pre><code>@implementation ViewController
+- (void)viewDidLoad
+{
+  [super viewDidLoad];
+  ￼
+  //create sublayer
+  CALayer *blueLayer = [CALayer layer];
+  blueLayer.frame = CGRectMake(50.0f, 50.0f, 100.0f, 100.0f);
+  blueLayer.backgroundColor = [UIColor blueColor].CGColor;
+
+  //set controller as layer delegate
+  blueLayer.delegate = self;
+
+  //ensure that layer backing image uses correct scale
+  blueLayer.contentsScale = [UIScreen mainScreen].scale; 
+
+  //add layer to our view
+  [self.layerView.layer addSublayer:blueLayer];
+
+  //force layer to redraw
+  [blueLayer display];
+}
+
+- (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)ctx
+{
+  //draw a thick red circle
+  CGContextSetLineWidth(ctx, 10.0f);
+  CGContextSetStrokeColorWithColor(ctx, [UIColor redColor].CGColor);
+  CGContextStrokeEllipseInRect(ctx, layer.bounds);
+}
+@end
+</code></pre><p> 需要注意的事情：</p>
+<ol>
+<li>当图层显示在屏幕上时，CALayer不会自动重绘它的内容，需要开发者显示调用<code>-display</code>方法。</li>
+<li>当使用CALayerDelegate绘制寄宿图时，不会对超出图层边界外的内容提供绘制支持。</li>
+</ol>
+</li>
+</ol>
+<hr>
+<h1 id="图层几何学"><a href="#图层几何学" class="headerlink" title="图层几何学"></a>图层几何学</h1><h3 id="布局"><a href="#布局" class="headerlink" title="布局"></a>布局</h3><p>与UIView的<code>center</code>属性对应的是CALayer中的<code>position</code>属性，他们都代表了相对于父图层<code>anchorPoint</code>所在的位置。而不是视觉上所观察到的图层中心的位置，在<code>anchorPoint</code>的值不为图层的中心时，<code>center</code>和<code>position</code>的值将会和视觉上图层中心点的值不一致。</p>
+<p>对于视图和图层来说，<code>frame</code>其实是一个虚拟的属性，是根据<code>bounds</code>，<code>position</code>和<code>transform</code>计算而来，所以当其中任何一个值发生改变，<code>frame</code>都会变化。相反，改变<code>frame</code>的值同样会影响它们的值。</p>
+<p>当对图层做变换的时候（如旋转/缩放），<code>frame</code>实际上代表了在图层旋转之后整个轴对其的矩形区域。此时，<code>frame</code>的宽高和<code>bounds</code>的宽高并不一致。</p>
+<h3 id="锚点-anchorPoint"><a href="#锚点-anchorPoint" class="headerlink" title="锚点(anchorPoint)"></a>锚点(anchorPoint)</h3><p>图层的<code>anchorPoint</code>属性可以看做是图层上一个不动的点，当图层进行旋转等操作的时候都是以此点为圆心进行的，类似于用一个钉子将纸钉在平面上，无论如何旋转，钉子的位置是不会动的。在默认情况下<code>anchorPoint</code>位于图层的中心(0.5, 0.5)。</p>
+<h3 id="坐标系"><a href="#坐标系" class="headerlink" title="坐标系"></a>坐标系</h3><p>CALayer给不同坐标系之间的图层转换提供了一些工具类方法：</p>
+<pre><code>- (CGPoint)convertPoint:(CGPoint)point fromLayer:(CALayer *)layer;
+- (CGPoint)convertPoint:(CGPoint)point toLayer:(CALayer *)layer;
+- (CGRect)convertRect:(CGRect)rect fromLayer:(CALayer *)layer;
+- (CGRect)convertRect:(CGRect)rect toLayer:(CALayer *)layer;
+</code></pre><p>这些方法可以把定义在一个图层坐标系下的点或者矩形转换成另一个图层坐标系下的点或者矩形。</p>
+<p>垂直翻转子图层：</p>
+<pre><code>layer.geometryFlipped = YES;
+</code></pre><h3 id="Hit-Testing"><a href="#Hit-Testing" class="headerlink" title="Hit Testing"></a>Hit Testing</h3><p>判断触摸点是否在图层内：</p>
+<pre><code>BOOL isContain = [layer containsPoint:point];
+</code></pre><p>返回图层本身，或者包含这个坐标点的叶子节点图层：</p>
+<pre><code>CALayer *layer = [layer hitTest:point];
+</code></pre><h3 id="自动布局"><a href="#自动布局" class="headerlink" title="自动布局"></a>自动布局</h3><p>当使用视图的时候，可以充分利用UIView类接口暴露出来的UIViewAutoresizingMask和NSLayoutConstraintAPI，但如果想随意控制CALayer的布局，就需要手工操作。</p>
+<p>图层手动布局：</p>
+<pre><code>- (void)layoutSublayersOfLayer:(CALayer *)layer;
+</code></pre><p>当图层的bounds发生改变，或者图层的-setNeedsLayout方法被调用的时候，这个函数将会被执行。这使得我们可以手动地重新摆放或者重新调整子图层的大小，但是不能像UIView的autoresizingMask和constraints属性做到自适应屏幕旋转。</p>
+<hr>
+<h1 id="视觉效果"><a href="#视觉效果" class="headerlink" title="视觉效果"></a>视觉效果</h1><h3 id="圆角"><a href="#圆角" class="headerlink" title="圆角"></a>圆角</h3><p>设置图层角曲率（默认为0）：</p>
+<pre><code>layer.conrnerRadius = 5.0f
+</code></pre><h3 id="图层边框"><a href="#图层边框" class="headerlink" title="图层边框"></a>图层边框</h3><p>设置图层边框宽度和颜色：</p>
+<pre><code>layer.borderWidth = 3.0f;
+layer.borderColor = [UIColor greenColor].CGColor;
+</code></pre><h3 id="阴影"><a href="#阴影" class="headerlink" title="阴影"></a>阴影</h3><p>设置图层阴影颜色，方向和距离，模糊度</p>
+<pre><code>layer.shadowColor = [UIColor orangeColor].CGColor;
+layer.shadowOffset = CGSizeMake(50, 50);
+layer.shadowRadius = 10;
+</code></pre><p>当图层的<code>masksToBounds</code>属性值设置为<code>YES</code>时，所有从图层中突出来的内容都会被剪裁掉。因此阴影效果将会失效。想要为这样的图层添加阴影，就需要在要添加阴影的图层范围上覆盖一个只画阴影的空图层。</p>
+<p>使用<code>shadowPath</code>指定任意形状的阴影：</p>
+<pre><code>@interface ViewController ()
+
+@property (nonatomic, weak) IBOutlet UIView *layerView1;
+@property (nonatomic, weak) IBOutlet UIView *layerView2;
+@end
+
+@implementation ViewController
+
+- (void)viewDidLoad
+{
+  [super viewDidLoad];
+
+  //enable layer shadows
+  self.layerView1.layer.shadowOpacity = 0.5f;
+  self.layerView2.layer.shadowOpacity = 0.5f;
+
+  //create a square shadow
+  CGMutablePathRef squarePath = CGPathCreateMutable();
+  CGPathAddRect(squarePath, NULL, self.layerView1.bounds);
+  self.layerView1.layer.shadowPath = squarePath; CGPathRelease(squarePath);
+
+  ￼//create a circular shadow
+  CGMutablePathRef circlePath = CGPathCreateMutable();
+  CGPathAddEllipseInRect(circlePath, NULL, self.layerView2.bounds);
+  self.layerView2.layer.shadowPath = circlePath; CGPathRelease(circlePath);
+}
+@end
+</code></pre><h3 id="图层蒙版"><a href="#图层蒙版" class="headerlink" title="图层蒙版"></a>图层蒙版</h3><p>设置图层蒙版：</p>
+<pre><code>//create mask layer
+CALayer *maskLayer = [CALayer layer];
+maskLayer.frame = self.layerView.bounds;
+UIImage *maskImage = [UIImage imageNamed:@&quot;Cone.png&quot;];
+maskLayer.contents = (__bridge id)maskImage.CGImage;
+
+//apply mask to image layer￼
+self.imageView.layer.mask = maskLayer;
+</code></pre><h3 id="拉伸过滤"><a href="#拉伸过滤" class="headerlink" title="拉伸过滤"></a>拉伸过滤</h3><p>设置图层拉伸过滤算法：</p>
+<pre><code>view.layer.magnificationFilter = kCAFilterNearest;
+</code></pre><h3 id="透明度"><a href="#透明度" class="headerlink" title="透明度"></a>透明度</h3><p><strong>透明度混合叠加问题：</strong>当现实一个透明度为50%的图层时，图层的每个像素都会一半现实自己的颜色，另一半显示图层下面的颜色。当图层包含一个同样50%透明的子图层时，所看到的视图，50%来自子视图，25%来自图层本身的颜色，另外25%则来自背景色。这时子视图的可见的则为75%，显示效果将会相当糟糕。</p>
+<p> 理想状态下，设置一个图层的透明度，是希望它所包含的图层树向一个整体一样的透明效果。这可以通过设置Info.plist文件中的UIViewGroupOpacity为YES来达到这个效果，但是这个设置会影响到这个应用，整个app可能会受到不良影响。</p>
+<p>另一个方法就是设置CALayer的一个叫做shouldRasterize属性来实现组透明的效果，如果它被设置为YES，在应用透明度实现之前，图层及其子图层都会被整合成一个整体的图片，这样就没有透明度混合的问题了。</p>
+<p>为了启用shouldRasterize属性，需要图层的rasterizationScale属性。默认情况下，所有图层拉伸都是1.0， 所以如果使用了shouldRasterize属性，就要确保你设置了rasterizationScale属性去匹配屏幕，以防止出现Retina屏幕像素化的问题。</p>
+<pre><code>layer.shouldRasterize = YES;
+layer.rasterizationScale = [UIScreen mainScreen].scale;
+</code></pre>
+      
+    </div>
+    <footer class="article-footer">
+      
+        <a data-url="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（1）/" data-id="cimofno390005jmsx73p064ma" class="article-share-link" data-share="baidu" data-title="iOS Core Animation Advanced Techniques学习笔记（1）">分享到</a>
+      
+
+      
+        <a href="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（1）/#ds-thread" class="article-comment-link">文章评论</a>
+      
+
+      
+  <ul class="article-tag-list"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Core-Animation/">Core Animation</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          iOS Core Animation Advanced Techniques学习笔记（3）
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2015/03/31/2015-04-01-JSONModel源码阅读笔记（1）/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">JSONModel源码阅读笔记（1）</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+  <section id="comments">
+    <div id="ds-thread" class="ds-thread" data-thread-key="2015/08/10/iOS Core Animation Advanced Techniques学习笔记（1）/" data-title="iOS Core Animation Advanced Techniques学习笔记（1）" data-url="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（1）/"></div>
+  </section>
+</section>
+      
+      <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/学习笔记/">学习笔记</a><span class="category-list-count">5</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/源码阅读/">源码阅读</a><span class="category-list-count">2</span></li></ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list"><li class="tag-list-item"><a class="tag-list-link" href="/tags/AutoreleasePool/">AutoreleasePool</a><span class="tag-list-count">1</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Core-Animation/">Core Animation</a><span class="tag-list-count">5</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JSON解析/">JSON解析</a><span class="tag-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/04/">四月 2016</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/08/">八月 2015</a><span class="archive-list-count">5</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/03/">三月 2015</a><span class="archive-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">近期文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2016/04/05/AutoreleasePool的原理和实现/">AutoreleasePool的原理和实现</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/">iOS Core Animation Advanced Techniques学习笔记（5）</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（2）/">iOS Core Animation Advanced Techniques学习笔记（2）</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（4）/">iOS Core Animation Advanced Techniques学习笔记（4）</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/">iOS Core Animation Advanced Techniques学习笔记（3）</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+      
+    </div>
+    <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      &copy; 2016 Helly<br>
+      Powered by <a href="http://hexo.io/" target="_blank">Hexo</a>
+      .
+      Theme by <a href="https://github.com/xiangming/landscape-plus" target="_blank">Landscape-plus</a>
+    </div>
+  </div>
+</footer>
+  </div>
+  <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">首页</a>
+  
+    <a href="/archives" class="mobile-nav-link">归档</a>
+  
+</nav>
+  <!-- totop start -->
+<div id="totop">
+<a title="返回顶部"><img src="/img/scrollup.png"/></a>
+</div>
+
+<!-- totop end -->
+
+<<!-- 多说公共JS代码 start (一个网页只需插入一次) -->
+<script type="text/javascript">
+var duoshuoQuery = {short_name:"helly1024"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+     || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+  </script>
+<!-- 多说公共JS代码 end -->
+
+
+<!-- 百度分享 start -->
+
+<div id="article-share-box" class="article-share-box">
+  <div id="bdshare" class="bdsharebuttonbox article-share-links">
+    <a class="article-share-weibo" data-cmd="tsina" title="分享到新浪微博"></a>
+    <a class="article-share-weixin" data-cmd="weixin" title="分享到微信"></a>
+    <a class="article-share-qq" data-cmd="sqq" title="分享到QQ"></a>
+    <a class="article-share-renren" data-cmd="renren" title="分享到人人网"></a>
+    <a class="article-share-more" data-cmd="more" title="更多"></a>
+  </div>
+</div>
+<script>
+  function SetShareData(cmd, config) {
+    if (shareDataTitle && shareDataUrl) {
+      config.bdText = shareDataTitle;
+      config.bdUrl = shareDataUrl;
+    }
+    return config;
+  }
+  window._bd_share_config={
+    "common":{onBeforeClick: SetShareData},
+    "share":{"bdCustomStyle":"/css/bdshare.css"}
+  };
+  with(document)0[(getElementsByTagName('head')[0]||body).appendChild(createElement('script')).src='http://bdimg.share.baidu.com/static/api/js/share.js?cdnversion='+~(-new Date()/36e5)];
+</script>
+
+<!-- 百度分享 end -->
+
+<script src="//cdnjs.cloudflare.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+
+
+  <link rel="stylesheet" href="/fancybox/jquery.fancybox.css">
+  <script src="/fancybox/jquery.fancybox.pack.js"></script>
+
+
+
+<script src="/js/script.js"></script>
+
+</div>
+</body>
+</html>

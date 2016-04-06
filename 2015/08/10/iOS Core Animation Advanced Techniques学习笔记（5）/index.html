@@ -1,0 +1,558 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>iOS Core Animation Advanced Techniques学习笔记（5） | Helly的技术博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="显示动画属性动画通过- (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key;方法，我们可以为一个图层添加一个显示动画。但是，当这个图层并不是一个视图的图层属性的实例时，动画会发生两次，一个是由我们设置的显示动画引起的，另一个这是因为图层的隐式动画。为了避免这种情况，我们需要在配置显示动画的时候指定它的代理，并实现代理方法-an">
+<meta property="og:type" content="article">
+<meta property="og:title" content="iOS Core Animation Advanced Techniques学习笔记（5）">
+<meta property="og:url" content="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/index.html">
+<meta property="og:site_name" content="Helly的技术博客">
+<meta property="og:description" content="显示动画属性动画通过- (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key;方法，我们可以为一个图层添加一个显示动画。但是，当这个图层并不是一个视图的图层属性的实例时，动画会发生两次，一个是由我们设置的显示动画引起的，另一个这是因为图层的隐式动画。为了避免这种情况，我们需要在配置显示动画的时候指定它的代理，并实现代理方法-an">
+<meta property="og:updated_time" content="2015-08-10T09:56:25.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="iOS Core Animation Advanced Techniques学习笔记（5）">
+<meta name="twitter:description" content="显示动画属性动画通过- (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key;方法，我们可以为一个图层添加一个显示动画。但是，当这个图层并不是一个视图的图层属性的实例时，动画会发生两次，一个是由我们设置的显示动画引起的，另一个这是因为图层的隐式动画。为了避免这种情况，我们需要在配置显示动画的时候指定它的代理，并实现代理方法-an">
+  
+    <link rel="alternative" href="/atom.xml" title="Helly的技术博客" type="application/atom+xml">
+  
+  
+    <link rel="icon" href="/favicon.ico">
+  
+  <link rel="stylesheet" href="/css/style.css">
+  <!--[if lt IE 9]><script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7/html5shiv.min.js"></script><![endif]-->
+  
+</head>
+<body>
+<div id="container">
+  <div id="wrap">
+    <link href="favicon.ico" type="image/x-icon" rel="icon"/>
+<header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Helly的技术博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">纸上得来终觉浅，绝知此事要躬行。</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">首页</a>
+        
+          <a class="main-nav-link" href="/archives">归档</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+          <a id="nav-rss-link" class="nav-icon" href="/atom.xml" title="RSS Feed"></a>
+        
+        <a id="nav-search-btn" class="nav-icon" title="Search"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="http://www.baidu.com/baidu" method="get" accept-charset="utf-8" class="search-form">
+          <input type="search" name="word" maxlength="20" class="search-form-input" placeholder="Search">
+          <input type="submit" value="" class="search-form-submit">
+          <input name=tn type=hidden value="bds">
+          <input name=cl type=hidden value="3">
+          <input name=ct type=hidden value="2097152">
+          <input type="hidden" name="si" value="helly1024.github.io">
+        </form>
+      </div>
+    </div>
+  </div>
+</header>
+    <div class="outer">
+      <section id="main"><article id="post-iOS Core Animation Advanced Techniques学习笔记（5）" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/" class="article-date">
+  <time datetime="2015-08-10T09:56:25.000Z" itemprop="datePublished">2015-08-10</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/学习笔记/">学习笔记</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="article-title" itemprop="name">
+      iOS Core Animation Advanced Techniques学习笔记（5）
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <h1 id="显示动画"><a href="#显示动画" class="headerlink" title="显示动画"></a>显示动画</h1><h3 id="属性动画"><a href="#属性动画" class="headerlink" title="属性动画"></a>属性动画</h3><p>通过<code>- (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key;</code>方法，我们可以为一个图层添加一个显示动画。但是，当这个图层并不是一个视图的图层属性的实例时，动画会发生两次，一个是由我们设置的显示动画引起的，另一个这是因为图层的隐式动画。为了避免这种情况，我们需要在配置显示动画的时候指定它的代理，并实现代理方法<code>-animationDidStop:finished:</code>，在其中设置一个新的事务，并禁用图层行为。</p>
+<p>在设置显示动画的过程中，还有一个问题就是在动画完成之后图层的状态又回到了动画之前的状态。这是因为在默认情况下，动画完成之后将彻底移除，不会在其超出时间后还修改呈现层的图层。一旦动画完成，呈现层的图层将回到模型层图层的值，而我们又没有修改图层属性的值，因此动画完成后图层显示的还是之前的状态。</p>
+<p>这里有两种解决方案，一种是在设置动画后更新图层对应属性的值：</p>
+<pre><code>// Add explicit animation to a single layer
+CGFloat red = rand() / (double)INT_MAX;
+CGFloat green = rand() / (double)INT_MAX;
+CGFloat blue = rand() / (double)INT_MAX;
+
+CABasicAnimation *animation = [CABasicAnimation animation];
+animation.keyPath = @&quot;backgroundColor&quot;;
+animation.toValue = (__bridge id)[UIColor colorWithRed:red green:green blue:blue alpha:1].CGColor;
+animation.delegate = self;
+[self.colorLayer addAnimation:animation forKey:nil];
+
+self.colorLayer.backgroundColor = [UIColor colorWithRed:red green:green blue:blue alpha:1].CGColor;
+</code></pre><p>另一种则是设置动画的 fillMode 属性为 <code>kCAFillModeForward</code> 以留在最终状态，并设置<code>removedOnCompletion</code> 为 NO 以防止它被自动移除：</p>
+<pre><code>// Add explicit animation to a single layer
+CGFloat red = rand() / (double)INT_MAX;
+CGFloat green = rand() / (double)INT_MAX;
+CGFloat blue = rand() / (double)INT_MAX;
+
+CABasicAnimation *animation = [CABasicAnimation animation];
+animation.keyPath = @&quot;backgroundColor&quot;;
+animation.toValue = (__bridge id)[UIColor colorWithRed:red green:green blue:blue alpha:1].CGColor;
+animation.delegate = self;
+
+animation.fillMode = kCAFillModeForwards;
+animation.removedOnCompletion = NO;
+
+[self.colorLayer addAnimation:animation forKey:nil];
+</code></pre><p>需要注意的是：如果将已完成的动画保持在 layer 上时，会造成额外的开销，因为渲染器会去进行额外的绘画工作。</p>
+<p>还有很重要的一点就是，当我们创建好一个动画并添加给一个layer时就立刻复制了一份，因此这个动画是可以重复添加个多个layer的。</p>
+<h3 id="关键帧动画"><a href="#关键帧动画" class="headerlink" title="关键帧动画"></a>关键帧动画</h3><p><code>CAKeyframeAnimation</code>是另一种UIKit没有暴露出来但功能强大的类。和<code>CABasicAnimation</code>类似，<code>CAKeyframeAnimation</code>同样是<code>CAPropertyAnimation</code>的一个子类，它依然作用于单一的一个属性，但是和<code>CABasicAnimation</code>不一样的是，它不限制于设置一个起始和结束的值，而是可以根据一连串随意的值来做动画。</p>
+<p>示例代码：</p>
+<pre><code>CAKeyframeAnimation *animation = [CAKeyframeAnimation animation];
+animation.keyPath = @&quot;position.x&quot;;
+animation.values = @[ @0, @10, @-10, @10, @0 ];
+animation.keyTimes = @[ @0, @(1 / 6.0), @(3 / 6.0), @(5 / 6.0), @1 ];
+animation.duration = 0.4;
+
+animation.additive = YES;
+
+[form.layer addAnimation:animation forKey:@&quot;shake&quot;];
+</code></pre><p>在使用<code>CAKeyframeAnimation</code>做动画时需要注意的是<code>CAKeyframeAnimation</code>并不能把当前layer的值作为第一帧动画，这就导致动画开始时会突然跳到第一帧的值，再再动画完成后恢复到原来的值，所以为了动画的平滑效果，我们需要开始和结束时的关键帧来匹配当前属性的值。</p>
+<p><code>CAKeyframeAnimation</code>还有另外一种方式来指定动画，就是使用CGPath。path属性可以用一种直观的方式，使用Core Graphics函数定义运动序列来绘制动画。</p>
+<p>示例代码：</p>
+<pre><code>- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //create a path
+    UIBezierPath *bezierPath = [[UIBezierPath alloc] init];
+    [bezierPath moveToPoint:CGPointMake(0, 150)];
+    [bezierPath addCurveToPoint:CGPointMake(300, 150) controlPoint1:CGPointMake(75, 0) controlPoint2:CGPointMake(225, 300)];
+
+    //add the ship
+    CALayer *shipLayer = [CALayer layer];
+    shipLayer.frame = CGRectMake(0, 0, 64, 64);
+    shipLayer.position = CGPointMake(0, 150);
+    shipLayer.contents = (__bridge id)[UIImage imageNamed: @&quot;Ship.png&quot;].CGImage;
+    [self.containerView.layer addSublayer:shipLayer];
+
+    //create the keyframe animation
+    CAKeyframeAnimation *animation = [CAKeyframeAnimation animation];
+    animation.keyPath = @&quot;position&quot;;
+    animation.duration = 4.0;
+    animation.path = bezierPath.CGPath;
+    animation.rotationMode = kCAAnimationRotateAuto;
+
+    [shipLayer addAnimation:animation forKey:nil];
+}
+</code></pre><h3 id="虚拟属性"><a href="#虚拟属性" class="headerlink" title="虚拟属性"></a>虚拟属性</h3><p>在layer中，有一种属性其实是不存在的，如：<code>transform.rotation</code>，<code>transform.rotation</code>和<code>transform.rotation</code>等。因为<code>CATransform3D</code>并不是一个对象，而是一个结构体，也没有符合KVC相关属性，它们实际上是CALayer用于处理动画变换的虚拟属性。</p>
+<p>它们不能被直接使用。当对他们做动画时，Core Animation自动地根据通过<code>CAValueFunction</code>来计算的值来更新<code>transform</code>属性。</p>
+<p><code>CAValueFunction</code>用于把我们赋给虚拟的transform.rotation简单浮点值转换成真正的用于摆放图层的CATransform3D矩阵值。我们可以通过设置<code>CAPropertyAnimation</code>的<code>valueFunction</code>属性来改变，这将会覆盖默认的函数。</p>
+<p>示例代码：</p>
+<pre><code>- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //add the ship
+    CALayer *shipLayer = [CALayer layer];
+    shipLayer.frame = CGRectMake(0, 0, 128, 128);
+    shipLayer.position = CGPointMake(150, 150);
+    shipLayer.contents = (__bridge id)[UIImage imageNamed: @&quot;Ship.png&quot;].CGImage;
+    [self.containerView.layer addSublayer:shipLayer];
+
+    //animate the ship rotation
+    CABasicAnimation *animation = [CABasicAnimation animation];
+    animation.keyPath = @&quot;transform.rotation&quot;;
+    animation.duration = 2.0;
+    animation.byValue = @(M_PI * 2);
+    [shipLayer addAnimation:animation forKey:nil];
+}
+</code></pre><h3 id="动画组"><a href="#动画组" class="headerlink" title="动画组"></a>动画组</h3><p><code>CABasicAnimation</code>和<code>CAKeyframeAnimation</code>仅仅作用于单独的属性，而<code>CAAnimationGroup</code>可以把这些动画组合在一起。<code>CAAnimationGroup</code>是另一个继承于<code>CAAnimation</code>的子类，它添加了一个<code>animations</code>数组的属性，用来组合别的动画。</p>
+<p>示例代码：</p>
+<pre><code>- (void)viewDidLoad
+{
+    [super viewDidLoad];
+
+    //create a path
+    UIBezierPath *bezierPath = [[UIBezierPath alloc] init];
+    [bezierPath moveToPoint:CGPointMake(0, 150)];
+    [bezierPath addCurveToPoint:CGPointMake(300, 150) 
+                   controlPoint1:CGPointMake(75, 0) 
+                   controlPoint2:CGPointMake(225, 300)];
+
+    //draw the path using a CAShapeLayer
+    CAShapeLayer *pathLayer = [CAShapeLayer layer];
+    pathLayer.path = bezierPath.CGPath;
+    pathLayer.fillColor = [UIColor clearColor].CGColor;
+    pathLayer.strokeColor = [UIColor redColor].CGColor;
+    pathLayer.lineWidth = 3.0f;
+    [self.containerView.layer addSublayer:pathLayer];
+
+    //add a colored layer
+    CALayer *colorLayer = [CALayer layer];
+    colorLayer.frame = CGRectMake(0, 0, 64, 64);
+    colorLayer.position = CGPointMake(0, 150);
+    colorLayer.backgroundColor = [UIColor greenColor].CGColor;
+    [self.containerView.layer addSublayer:colorLayer];
+
+    //create the position animation
+    CAKeyframeAnimation *animation1 = [CAKeyframeAnimation animation];
+    animation1.keyPath = @&quot;position&quot;;
+    animation1.path = bezierPath.CGPath;
+    animation1.rotationMode = kCAAnimationRotateAuto;
+
+    //create the color animation
+    CABasicAnimation *animation2 = [CABasicAnimation animation];
+    animation2.keyPath = @&quot;backgroundColor&quot;;
+    animation2.toValue = (__bridge id)[UIColor redColor].CGColor;
+
+    //create group animation
+    CAAnimationGroup *groupAnimation = [CAAnimationGroup animation];
+    groupAnimation.animations = @[animation1, animation2]; 
+    groupAnimation.duration = 4.0;
+
+    //add the animation to the color layer
+    [colorLayer addAnimation:groupAnimation forKey:nil];
+}
+</code></pre><h3 id="过渡"><a href="#过渡" class="headerlink" title="过渡"></a>过渡</h3><p>属性动画只对layer的可动画属性起作用，如果要改变一个不可动画属性（如图片、文本），或者从层级关系中添加或移除图层，属性动画将不再起作用，这时，我们可以使用过渡来实现动画效果。</p>
+<p>为了创建一个过渡动画，我们将使用CATransition，同样是另一个CAAnimation的子类，和别的子类不同，CATransition有一个type和subtype来标识变换效果。type属性是一个NSString类型，用来设置过渡动画效果，可以被设置成如下类型：</p>
+<ul>
+<li>kCATransitionFade </li>
+<li>kCATransitionMoveIn </li>
+<li>kCATransitionPush </li>
+<li>kCATransitionReveal</li>
+</ul>
+<p>通过subtype我们可以控制动画的方向，它提供了如下四种类型：</p>
+<ul>
+<li>kCATransitionFromRight </li>
+<li>kCATransitionFromLeft </li>
+<li>kCATransitionFromTop </li>
+<li>kCATransitionFromBottom</li>
+</ul>
+<p>示例代码：</p>
+<pre><code>- (IBAction)switchImage
+{
+    //set up crossfade transition
+    CATransition *transition = [CATransition animation];
+    transition.type = kCATransitionFade;
+
+    //apply transition to imageview backing layer
+    [self.imageView.layer addAnimation:transition forKey:nil];
+
+    //cycle to next image
+    UIImage *currentImage = self.imageView.image;
+    NSUInteger index = [self.images indexOfObject:currentImage];
+    index = (index + 1) % [self.images count];
+    self.imageView.image = self.images[index];
+}
+</code></pre><h3 id="隐式过渡"><a href="#隐式过渡" class="headerlink" title="隐式过渡"></a>隐式过渡</h3><p>对于视图关联的图层，或者是其他隐式动画的行为，过渡的特性依然是被禁用的，但是对于我们自己创建的图层，这意味着对图层contents图片做的改动都会自动附上淡入淡出的动画。</p>
+<h3 id="对图层树的动画"><a href="#对图层树的动画" class="headerlink" title="对图层树的动画"></a>对图层树的动画</h3><p><code>CATransition</code>并不作用于指定的图层属性，这就是说我们可以在即使不能准确得知改变了什么的情况下对图层做动画，例如，在不知道UITableView哪一行被添加或者删除的情况下，直接就可以平滑地刷新它，或者在不知道UIViewController内部的视图层级的情况下对两个不同的实例做过渡动画。</p>
+<p>在这里，我们只要将过渡动画添加到被影响图层的<code>superlayer</code>，就实现了对整个图层树添加过渡动画。</p>
+<p>对<code>UITabBarController</code>添加过渡动画，示例代码：</p>
+<pre><code>#import &quot;AppDelegate.h&quot;
+#import &quot;FirstViewController.h&quot; 
+#import &quot;SecondViewController.h&quot;
+#import 
+@implementation AppDelegate
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
+    self.window = [[UIWindow alloc] initWithFrame: [[UIScreen mainScreen] bounds]];
+    UIViewController *viewController1 = [[FirstViewController alloc] init];
+    UIViewController *viewController2 = [[SecondViewController alloc] init];
+    self.tabBarController = [[UITabBarController alloc] init];
+    self.tabBarController.viewControllers = @[viewController1, viewController2];
+    self.tabBarController.delegate = self;
+    self.window.rootViewController = self.tabBarController;
+    [self.window makeKeyAndVisible];
+    return YES;
+}
+
+- (void)tabBarController:(UITabBarController *)tabBarController didSelectViewController:(UIViewController *)viewController
+{
+    ￼//set up crossfade transition
+    CATransition *transition = [CATransition animation];
+    transition.type = kCATransitionFade;
+
+    //apply transition to tab bar controller&apos;s view
+    [self.tabBarController.view.layer addAnimation:transition forKey:nil];
+}
+
+@end
+</code></pre><h3 id="在动画过程中取消动画"><a href="#在动画过程中取消动画" class="headerlink" title="在动画过程中取消动画"></a>在动画过程中取消动画</h3><p>移除指定动画：</p>
+<pre><code>- (void)removeAnimationForKey:(NSString *)key;
+</code></pre><p>移除所有动画：</p>
+<pre><code>- (void)removeAllAnimations;
+</code></pre><hr>
+<h1 id="图层时间"><a href="#图层时间" class="headerlink" title="图层时间"></a>图层时间</h1><h3 id="CAMediaTiming协议"><a href="#CAMediaTiming协议" class="headerlink" title="CAMediaTiming协议"></a>CAMediaTiming协议</h3><p>CAMediaTiming协议定义了在一段动画内用来控制逝去时间的属性的集合，CALayer和CAAnimation都实现了这个协议，所以时间可以被任意基于一个图层或者一段动画的类控制。</p>
+<h4 id="持续和重复"><a href="#持续和重复" class="headerlink" title="持续和重复"></a>持续和重复</h4><p><code>duration</code>：设置动画迭代一次的时间</p>
+<p><code>repeatCount</code>：设置动画迭代次数</p>
+<p>动画时长 = <code>duration</code> * <code>repeatCount</code></p>
+<p><code>repeatDuration</code>：设置动画重复时长（当时此属性值与duration的值一致时动画不重复）</p>
+<p><code>autoreverses</code>：完成一次动画迭代后，自动后退到图层原始状态</p>
+<h4 id="相对时间"><a href="#相对时间" class="headerlink" title="相对时间"></a>相对时间</h4><p><code>beginTime</code>：设置动画开始延迟时间</p>
+<p><code>speed</code>：设置动画播放倍数，默认为1.0</p>
+<p><code>timeOffset</code>：设置动画播放位置（0~1）</p>
+<h4 id="fillMode"><a href="#fillMode" class="headerlink" title="fillMode"></a>fillMode</h4><p><code>fillMode</code>用来设置动画开始前和结束后的这段时间动画属性的值，它是一个NSString类型，可以接受如下四种常量：</p>
+<ul>
+<li>kCAFillModeForwards </li>
+<li>kCAFillModeBackwards </li>
+<li>kCAFillModeBoth </li>
+<li>kCAFillModeRemoved</li>
+</ul>
+<p>注意，如果要图层保持动画结束时的状态，除了要设置<code>fillMode</code>，还需要将<code>removeOnCompletion</code>设置为<code>NO</code>。另外，将已完成的动画保持在layer上，会造成额外的开销，因为渲染器需要进行额外的绘制工作。所以，最好是在为<code>layer</code>添加动画的时候设置一个key，这样就可以在不需要动画的时候将它从<code>layer</code>上移除。</p>
+<h3 id="层级关系时间"><a href="#层级关系时间" class="headerlink" title="层级关系时间"></a>层级关系时间</h3><p>在图层树中每个图层都有一个特定的坐标系统来定义该图层和它的父图层之间的关系，动画时间同样也是如此。每个图层和动画都有一套基于它父视图的层级关系概念上的时间。改变一个layer的时间将会影响该图层和它的子图层的动画，但不会对它的父图层产生影响。这点同样适用于由<code>CAAnimationGroup</code>组成的动画。</p>
+<p>调整<code>CALayer</code>或<code>CAAnimationGroup</code>的<code>duration</code>，<code>repeatCount</code>和<code>repeatDuration</code>属性不会对子图层的动画产生影响，而调整<code>beginTime</code>, <code>timeOffset</code>和<code>speed</code> 属相将会对子视图的动画也产生影响。</p>
+<h4 id="全局时间和局部时间"><a href="#全局时间和局部时间" class="headerlink" title="全局时间和局部时间"></a>全局时间和局部时间</h4><p>在Core Animation当中，有着全局时间和局部时间的概念。全局时间以设备时间为标准，通过如下方法可以获得：</p>
+<pre><code>CFTimeInterval time = CACurrentMediaTime();
+</code></pre><p>局部时间是每个layer的时间体系，当<code>beginTime</code>,<code>timeOffset</code>或<code>speed</code>属性发生改变时，局部时间可能会和全局时间不一致。通过以下方法可以在转换局部时间：</p>
+<pre><code>- (CFTimeInterval)convertTime:(CFTimeInterval)t fromLayer:(CALayer *)l; 
+- (CFTimeInterval)convertTime:(CFTimeInterval)t toLayer:(CALayer *)l;
+</code></pre><h4 id="暂停，倒放和快进"><a href="#暂停，倒放和快进" class="headerlink" title="暂停，倒放和快进"></a>暂停，倒放和快进</h4><p>当将一个动画的<code>speed</code>属性设为0，动画将暂停，但是这不会对正在动画中的layer产生影响，因为当我们将一个动画添加到一个layer上时，是将动画copy然后赋值给layer。我们可以通过<code>-animationForKey:</code>获取到正在动画的layer真正的动画，但是，即使获取到了正确的动画，我们依然不能通过直接修改动画的<code>speed</code>属性来让动画暂停。</p>
+<p>当然，我们也可以在动画被移除钱获取presentation layer的属性值然后赋值给model layer。但是这样做有一个缺点就是，在之后想要再继续动画将会很复杂。</p>
+<p>暂停动画正确地姿势是利用层级关系时间。也就是调整动画所属layer的<code>speed</code>属性。</p>
+<p>如果要调整整个app的动画速度，我们只需要如此这般：</p>
+<pre><code>self.window.layer.speed = 100;
+</code></pre><h3 id="手动动画"><a href="#手动动画" class="headerlink" title="手动动画"></a>手动动画</h3><p>通过layer的<code>timeOffset</code>属性和<code>UIPanGestureRecognizer</code>手势，我们可以很容易地实现一个手动控制的动画。</p>
+<hr>
+<h1 id="缓冲"><a href="#缓冲" class="headerlink" title="缓冲"></a>缓冲</h1><h3 id="动画速度"><a href="#动画速度" class="headerlink" title="动画速度"></a>动画速度</h3><h4 id="CAMediaTimingFunction"><a href="#CAMediaTimingFunction" class="headerlink" title="CAMediaTimingFunction"></a>CAMediaTimingFunction</h4><p>通过设置<code>CAAnimation</code>的<code>timingFunction</code>属性，我们可以改变动画的缓冲函数：</p>
+<pre><code>animation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+</code></pre><p>如果要改变隐式动画的缓冲函数，我们可以使用<code>CATransaction</code>的<code>+setAnimationTimingFunction:</code>方法：</p>
+<pre><code>[CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
+</code></pre><p>创建<code>CAMediaTimingFunction</code>最简单的方法是调用<code>+timingFunctionWithName:</code>的构造方法。这里传入如下几个常量之一：</p>
+<ul>
+<li>kCAMediaTimingFunctionLinear </li>
+<li>kCAMediaTimingFunctionEaseIn </li>
+<li>kCAMediaTimingFunctionEaseOut </li>
+<li>kCAMediaTimingFunctionEaseInEaseOut</li>
+<li>kCAMediaTimingFunctionDefault</li>
+</ul>
+<h4 id="UIView的动画缓冲"><a href="#UIView的动画缓冲" class="headerlink" title="UIView的动画缓冲"></a>UIView的动画缓冲</h4><p>UIKit的动画也同样支持这些缓冲方法的使用，尽管语法和常量有些不同，为了改变UIView动画的缓冲选项，给options参数添加如下常量之一：</p>
+<ul>
+<li>UIViewAnimationOptionCurveEaseInOut </li>
+<li>UIViewAnimationOptionCurveEaseIn </li>
+<li>UIViewAnimationOptionCurveEaseOut </li>
+<li>UIViewAnimationOptionCurveLinear</li>
+</ul>
+<p>示例代码：</p>
+<pre><code>[UIView animateWithDuration:5
+                      delay:1
+                    options:UIViewAnimationOptionCurveEaseInOut
+                 animations:^{
+    view.layer.backgroundColor = [UIColor redColor].CGColor;
+}
+                 completion:NULL];
+</code></pre><h4 id="缓冲和关键帧动画"><a href="#缓冲和关键帧动画" class="headerlink" title="缓冲和关键帧动画"></a>缓冲和关键帧动画</h4><p><code>CAKeyframeAnimation</code>有一个NSArray类型的<code>timingFunctions</code>属性，我们可以用它来对每次动画的步骤指定不同的计时函数。但是指定函数的个数一定要等于keyframes数组的元素个数减一，因为它是描述每一帧之间动画速度的函数。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      
+        <a data-url="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/" data-id="cimofno3h000cjmsxu6hpba08" class="article-share-link" data-share="baidu" data-title="iOS Core Animation Advanced Techniques学习笔记（5）">分享到</a>
+      
+
+      
+        <a href="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/#ds-thread" class="article-comment-link">文章评论</a>
+      
+
+      
+  <ul class="article-tag-list"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Core-Animation/">Core Animation</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2016/04/05/AutoreleasePool的原理和实现/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          AutoreleasePool的原理和实现
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（2）/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">iOS Core Animation Advanced Techniques学习笔记（2）</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+  <section id="comments">
+    <div id="ds-thread" class="ds-thread" data-thread-key="2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/" data-title="iOS Core Animation Advanced Techniques学习笔记（5）" data-url="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/"></div>
+  </section>
+</section>
+      
+      <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/学习笔记/">学习笔记</a><span class="category-list-count">5</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/源码阅读/">源码阅读</a><span class="category-list-count">2</span></li></ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list"><li class="tag-list-item"><a class="tag-list-link" href="/tags/AutoreleasePool/">AutoreleasePool</a><span class="tag-list-count">1</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Core-Animation/">Core Animation</a><span class="tag-list-count">5</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JSON解析/">JSON解析</a><span class="tag-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/04/">四月 2016</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/08/">八月 2015</a><span class="archive-list-count">5</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/03/">三月 2015</a><span class="archive-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">近期文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2016/04/05/AutoreleasePool的原理和实现/">AutoreleasePool的原理和实现</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/">iOS Core Animation Advanced Techniques学习笔记（5）</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（2）/">iOS Core Animation Advanced Techniques学习笔记（2）</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（4）/">iOS Core Animation Advanced Techniques学习笔记（4）</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/">iOS Core Animation Advanced Techniques学习笔记（3）</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+      
+    </div>
+    <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      &copy; 2016 Helly<br>
+      Powered by <a href="http://hexo.io/" target="_blank">Hexo</a>
+      .
+      Theme by <a href="https://github.com/xiangming/landscape-plus" target="_blank">Landscape-plus</a>
+    </div>
+  </div>
+</footer>
+  </div>
+  <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">首页</a>
+  
+    <a href="/archives" class="mobile-nav-link">归档</a>
+  
+</nav>
+  <!-- totop start -->
+<div id="totop">
+<a title="返回顶部"><img src="/img/scrollup.png"/></a>
+</div>
+
+<!-- totop end -->
+
+<<!-- 多说公共JS代码 start (一个网页只需插入一次) -->
+<script type="text/javascript">
+var duoshuoQuery = {short_name:"helly1024"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+     || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+  </script>
+<!-- 多说公共JS代码 end -->
+
+
+<!-- 百度分享 start -->
+
+<div id="article-share-box" class="article-share-box">
+  <div id="bdshare" class="bdsharebuttonbox article-share-links">
+    <a class="article-share-weibo" data-cmd="tsina" title="分享到新浪微博"></a>
+    <a class="article-share-weixin" data-cmd="weixin" title="分享到微信"></a>
+    <a class="article-share-qq" data-cmd="sqq" title="分享到QQ"></a>
+    <a class="article-share-renren" data-cmd="renren" title="分享到人人网"></a>
+    <a class="article-share-more" data-cmd="more" title="更多"></a>
+  </div>
+</div>
+<script>
+  function SetShareData(cmd, config) {
+    if (shareDataTitle && shareDataUrl) {
+      config.bdText = shareDataTitle;
+      config.bdUrl = shareDataUrl;
+    }
+    return config;
+  }
+  window._bd_share_config={
+    "common":{onBeforeClick: SetShareData},
+    "share":{"bdCustomStyle":"/css/bdshare.css"}
+  };
+  with(document)0[(getElementsByTagName('head')[0]||body).appendChild(createElement('script')).src='http://bdimg.share.baidu.com/static/api/js/share.js?cdnversion='+~(-new Date()/36e5)];
+</script>
+
+<!-- 百度分享 end -->
+
+<script src="//cdnjs.cloudflare.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+
+
+  <link rel="stylesheet" href="/fancybox/jquery.fancybox.css">
+  <script src="/fancybox/jquery.fancybox.pack.js"></script>
+
+
+
+<script src="/js/script.js"></script>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,726 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>iOS Core Animation Advanced Techniques学习笔记（3） | Helly的技术博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="专用图层CAShapeLayerCAShapeLayer的优点：
+
+不会出现像素化
+不会被图层边界剪裁掉
+渲染快速，使用了硬件加速
+高效使用内存，不需要像普通CALayer一样创建一个寄宿图形
+
+CAShapeLayer可以用来绘制所有能够通过CGPath来表示的形状。这个形状不一定要闭合，图层路径也不一定要不可破，事实上可以在一个图层上绘制好几个不同的形状。你可以控制一些属性比如lineWith">
+<meta property="og:type" content="article">
+<meta property="og:title" content="iOS Core Animation Advanced Techniques学习笔记（3）">
+<meta property="og:url" content="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/index.html">
+<meta property="og:site_name" content="Helly的技术博客">
+<meta property="og:description" content="专用图层CAShapeLayerCAShapeLayer的优点：
+
+不会出现像素化
+不会被图层边界剪裁掉
+渲染快速，使用了硬件加速
+高效使用内存，不需要像普通CALayer一样创建一个寄宿图形
+
+CAShapeLayer可以用来绘制所有能够通过CGPath来表示的形状。这个形状不一定要闭合，图层路径也不一定要不可破，事实上可以在一个图层上绘制好几个不同的形状。你可以控制一些属性比如lineWith">
+<meta property="og:updated_time" content="2015-08-10T11:34:01.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="iOS Core Animation Advanced Techniques学习笔记（3）">
+<meta name="twitter:description" content="专用图层CAShapeLayerCAShapeLayer的优点：
+
+不会出现像素化
+不会被图层边界剪裁掉
+渲染快速，使用了硬件加速
+高效使用内存，不需要像普通CALayer一样创建一个寄宿图形
+
+CAShapeLayer可以用来绘制所有能够通过CGPath来表示的形状。这个形状不一定要闭合，图层路径也不一定要不可破，事实上可以在一个图层上绘制好几个不同的形状。你可以控制一些属性比如lineWith">
+  
+    <link rel="alternative" href="/atom.xml" title="Helly的技术博客" type="application/atom+xml">
+  
+  
+    <link rel="icon" href="/favicon.ico">
+  
+  <link rel="stylesheet" href="/css/style.css">
+  <!--[if lt IE 9]><script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7/html5shiv.min.js"></script><![endif]-->
+  
+</head>
+<body>
+<div id="container">
+  <div id="wrap">
+    <link href="favicon.ico" type="image/x-icon" rel="icon"/>
+<header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Helly的技术博客</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">纸上得来终觉浅，绝知此事要躬行。</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">首页</a>
+        
+          <a class="main-nav-link" href="/archives">归档</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+          <a id="nav-rss-link" class="nav-icon" href="/atom.xml" title="RSS Feed"></a>
+        
+        <a id="nav-search-btn" class="nav-icon" title="Search"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="http://www.baidu.com/baidu" method="get" accept-charset="utf-8" class="search-form">
+          <input type="search" name="word" maxlength="20" class="search-form-input" placeholder="Search">
+          <input type="submit" value="" class="search-form-submit">
+          <input name=tn type=hidden value="bds">
+          <input name=cl type=hidden value="3">
+          <input name=ct type=hidden value="2097152">
+          <input type="hidden" name="si" value="helly1024.github.io">
+        </form>
+      </div>
+    </div>
+  </div>
+</header>
+    <div class="outer">
+      <section id="main"><article id="post-iOS Core Animation Advanced Techniques学习笔记（3）" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/" class="article-date">
+  <time datetime="2015-08-10T02:10:51.000Z" itemprop="datePublished">2015-08-10</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/学习笔记/">学习笔记</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="article-title" itemprop="name">
+      iOS Core Animation Advanced Techniques学习笔记（3）
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <h1 id="专用图层"><a href="#专用图层" class="headerlink" title="专用图层"></a>专用图层</h1><h3 id="CAShapeLayer"><a href="#CAShapeLayer" class="headerlink" title="CAShapeLayer"></a>CAShapeLayer</h3><p>CAShapeLayer的优点：</p>
+<ul>
+<li>不会出现像素化</li>
+<li>不会被图层边界剪裁掉</li>
+<li>渲染快速，使用了硬件加速</li>
+<li>高效使用内存，不需要像普通CALayer一样创建一个寄宿图形</li>
+</ul>
+<p>CAShapeLayer可以用来绘制所有能够通过CGPath来表示的形状。这个形状不一定要闭合，图层路径也不一定要不可破，事实上可以在一个图层上绘制好几个不同的形状。你可以控制一些属性比如lineWith（线宽，用点表示单位），lineCap（线条结尾的样子），和lineJoin（线条之间的结合点的样子）.但是在图层层面只有一次机会设置这些属性。如果想用不同颜色或风格来绘制多个形状，就必须每个形状准备一个图层了。</p>
+<p>示例代码：</p>
+<pre><code>@implementation ShapeLayerViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    // 绘制火柴人
+    UIBezierPath *path = [[UIBezierPath alloc] init];
+    [path moveToPoint:CGPointMake(174, 100)];              
+    [path addArcWithCenter:CGPointMake(150, 100)
+                    radius:25
+                    startAngle:0
+                    endAngle:2*M_PI
+                  clockwise:YES];
+
+    [path moveToPoint:CGPointMake(150, 125)];
+    [path addLineToPoint:CGPointMake(150, 175)];
+    [path addLineToPoint:CGPointMake(125, 225)];
+
+    [path moveToPoint:CGPointMake(150, 175)];
+    [path addLineToPoint:CGPointMake(175, 225)];
+
+    [path moveToPoint:CGPointMake(100, 145)];
+    [path addLineToPoint:CGPointMake(200, 145)];
+
+    CAShapeLayer *shapeLayer = [[CAShapeLayer alloc] init];
+    shapeLayer.strokeColor = [UIColor greenColor].CGColor;
+    shapeLayer.fillColor = [UIColor clearColor].CGColor;
+    shapeLayer.lineWidth = 5;
+    shapeLayer.lineJoin = kCALineJoinRound;
+
+    shapeLayer.path = path.CGPath;
+
+    [self.view.layer addSublayer:shapeLayer]; 
+}
+</code></pre><p>使用CAShapeLayer可以单独指定矩形的一个或多个角为圆角：</p>
+<pre><code>CGRect rect = CGRectMake(50, 50, 100, 100);
+CGSize radii = CGSizeMake(20, 20);
+
+UIRectCorner corners = UIRectCornerTopLeft | UIRectCornerBottomRight;
+
+UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:rect 
+                                            byRoundingCorners:corners 
+                                                  cornerRadii:radii];
+</code></pre><h3 id="CATextLayer"><a href="#CATextLayer" class="headerlink" title="CATextLayer"></a>CATextLayer</h3><p>示例代码：</p>
+<pre><code>- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    CATextLayer *layer = [CATextLayer layer];
+    layer.frame = self.view.bounds;
+    [self.view.layer addSublayer:layer];
+
+    layer.foregroundColor = [UIColor greenColor].CGColor;
+    layer.alignmentMode = kCAAlignmentCenter;
+    layer.wrapped = YES;
+
+    layer.contentsScale = [UIScreen mainScreen].scale;
+
+    UIFont *font = [UIFont systemFontOfSize:28.0f];
+
+    CFStringRef fontName = (__bridge CFStringRef)font.fontName;
+    CGFontRef fontRef = CGFontCreateWithFontName(fontName);
+    layer.font = fontRef;
+    layer.fontSize = font.pointSize;
+    CGFontRelease(fontRef);
+
+    NSString *text = @&quot;Hellow World!&quot;;
+
+    layer.string = text;
+}
+</code></pre><h4 id="富文本"><a href="#富文本" class="headerlink" title="富文本"></a>富文本</h4><p>示例代码：</p>
+<pre><code>NSString *text = @&quot;\n\n\n\nLorem ipsum dolor sit amet, consectetur adipiscing \n elit. Quisque massa arcu, eleifend vel varius in, facilisis pulvinar \n leo. Nunc quis nunc at mauris pharetra condimentum ut ac neque. Nunc \n elementum, libero ut porttitor dictum, diam odio congue lacus, vel \n fringilla sapien diam at purus. Etiam suscipit pretium nunc sit amet \n lobortis&quot;;
+
+
+//create attributed string
+NSMutableAttributedString *string = nil;
+string = [[NSMutableAttributedString alloc] initWithString:text];
+
+//convert UIFont to a CTFont
+CFStringRef fontName = (__bridge CFStringRef)font.fontName;
+CGFloat fontSize = font.pointSize;
+CTFontRef fontRef = CTFontCreateWithName(fontName, fontSize, NULL);
+
+//set text attributes
+NSDictionary *attribs = @{
+                          (__bridge id)kCTForegroundColorAttributeName:(__bridge id)[UIColor blackColor].CGColor,
+                          (__bridge id)kCTFontAttributeName: (__bridge id)fontRef
+                          };
+
+[string setAttributes:attribs range:NSMakeRange(0, [text length])];
+attribs = @{
+            (__bridge id)kCTForegroundColorAttributeName: (__bridge id)[UIColor redColor].CGColor,
+            (__bridge id)kCTUnderlineStyleAttributeName: @(kCTUnderlineStyleSingle),
+            (__bridge id)kCTFontAttributeName: (__bridge id)fontRef
+            };
+[string setAttributes:attribs range:NSMakeRange(6, 5)];
+
+//release the CTFont we created earlier
+CFRelease(fontRef);
+
+//    layer.fontSize = font.pointSize;
+layer.string = string;
+</code></pre><hr>
+<h3 id="CATransformLayer"><a href="#CATransformLayer" class="headerlink" title="CATransformLayer"></a>CATransformLayer</h3><p>通过<code>CATransformLayer</code>我们可以在构造复杂的3D事物时，组织独立的元素，并且为每个元素添加不同的3D转换效果。</p>
+<p>示例代码：</p>
+<pre><code>@interface ViewController ()
+
+@property (nonatomic, weak) IBOutlet UIView *containerView;
+
+@end
+
+@implementation ViewController
+
+- (CALayer *)faceWithTransform:(CATransform3D)transform
+{
+  //create cube face layer
+  CALayer *face = [CALayer layer];
+  face.frame = CGRectMake(-50, -50, 100, 100);
+
+  //apply a random color
+  CGFloat red = (rand() / (double)INT_MAX);
+  CGFloat green = (rand() / (double)INT_MAX);
+  CGFloat blue = (rand() / (double)INT_MAX);
+  face.backgroundColor = [UIColor colorWithRed:red green:green blue:blue alpha:1.0].CGColor;
+
+  ￼//apply the transform and return
+  face.transform = transform;
+  return face;
+}
+
+- (CALayer *)cubeWithTransform:(CATransform3D)transform
+{
+  //create cube layer
+  CATransformLayer *cube = [CATransformLayer layer];
+
+  //add cube face 1
+  CATransform3D ct = CATransform3DMakeTranslation(0, 0, 50);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 2
+  ct = CATransform3DMakeTranslation(50, 0, 0);
+  ct = CATransform3DRotate(ct, M_PI_2, 0, 1, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 3
+  ct = CATransform3DMakeTranslation(0, -50, 0);
+  ct = CATransform3DRotate(ct, M_PI_2, 1, 0, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 4
+  ct = CATransform3DMakeTranslation(0, 50, 0);
+  ct = CATransform3DRotate(ct, -M_PI_2, 1, 0, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 5
+  ct = CATransform3DMakeTranslation(-50, 0, 0);
+  ct = CATransform3DRotate(ct, -M_PI_2, 0, 1, 
+  ct = CATransform3DRotate(ct, -M_PI_2, 0, 1, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //add cube face 6
+  ct = CATransform3DMakeTranslation(0, 0, -50);
+  ct = CATransform3DRotate(ct, M_PI, 0, 1, 0);
+  [cube addSublayer:[self faceWithTransform:ct]];
+
+  //center the cube layer within the container
+  CGSize containerSize = self.containerView.bounds.size;
+  cube.position = CGPointMake(containerSize.width / 2.0, containerSize.height / 2.0);
+
+  //apply the transform and return
+  cube.transform = transform;
+  return cube;
+}
+
+- (void)viewDidLoad
+{￼
+  [super viewDidLoad];
+
+  //set up the perspective transform
+  CATransform3D pt = CATransform3DIdentity;
+  pt.m34 = -1.0 / 500.0;
+  self.containerView.layer.sublayerTransform = pt;
+
+  //set up the transform for cube 1 and add it
+  CATransform3D c1t = CATransform3DIdentity;
+  c1t = CATransform3DTranslate(c1t, -100, 0, 0);
+  CALayer *cube1 = [self cubeWithTransform:c1t];
+  [self.containerView.layer addSublayer:cube1];
+
+  //set up the transform for cube 2 and add it
+  CATransform3D c2t = CATransform3DIdentity;
+  c2t = CATransform3DTranslate(c2t, 100, 0, 0);
+  c2t = CATransform3DRotate(c2t, -M_PI_4, 1, 0, 0);
+  c2t = CATransform3DRotate(c2t, -M_PI_4, 0, 1, 0);
+  CALayer *cube2 = [self cubeWithTransform:c2t];
+  [self.containerView.layer addSublayer:cube2];
+}
+@end
+</code></pre><h3 id="CAGradientLayer"><a href="#CAGradientLayer" class="headerlink" title="CAGradientLayer"></a>CAGradientLayer</h3><p><code>CAGradientLayer</code>是用来生成两种或更多颜色平滑渐变的。</p>
+<p>示例代码：</p>
+<pre><code>@implementation GradientLayerViewController
+
+- (void)viewDidLoad {
+
+    [super viewDidLoad];
+
+    CAGradientLayer *gradientLayer = [CAGradientLayer layer];
+
+    gradientLayer.frame = self.view.bounds;
+
+    // Set Colors
+    gradientLayer.colors = @[
+                             (__bridge id)[UIColor redColor].CGColor,
+                             (__bridge id)[UIColor blueColor].CGColor,
+                             (__bridge id)[UIColor grayColor].CGColor,
+                             (__bridge id)[UIColor greenColor].CGColor,
+                             (__bridge id)[UIColor cyanColor].CGColor,
+                             (__bridge id)[UIColor yellowColor].CGColor];
+
+    // Set the range of each color
+    gradientLayer.locations = @[@0, @0.2, @0.29, @0.38, @0.57, @1];
+
+    // Set the startPoint and endPoint
+    gradientLayer.startPoint = CGPointMake(0, 0);
+    gradientLayer.endPoint = CGPointMake(1, 1);
+
+    [self.view.layer addSublayer:gradientLayer];
+}
+
+
+@end
+</code></pre><h3 id="CAReplicatorLayer"><a href="#CAReplicatorLayer" class="headerlink" title="CAReplicatorLayer"></a>CAReplicatorLayer</h3><p><code>CAReplicatorLayer</code>的目的是为了高效生成许多相似的图层。它会绘制一个或多个图层的子图层，并在每个复制体上应用不同的变换。</p>
+<p>重复图层示例代码：</p>
+<pre><code>@interface ViewController ()
+
+@property (nonatomic, weak) IBOutlet UIView *containerView;
+
+@end
+
+@implementation ViewController
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //create a replicator layer and add it to our view
+    CAReplicatorLayer *replicator = [CAReplicatorLayer layer];
+    replicator.frame = self.containerView.bounds;
+    [self.containerView.layer addSublayer:replicator];
+
+    //configure the replicator
+    replicator.instanceCount = 10;
+
+    //apply a transform for each instance
+    CATransform3D transform = CATransform3DIdentity;
+    transform = CATransform3DTranslate(transform, 0, 200, 0);
+    transform = CATransform3DRotate(transform, M_PI / 5.0, 0, 0, 1);
+    transform = CATransform3DTranslate(transform, 0, -200, 0);
+    replicator.instanceTransform = transform;
+
+    //apply a color shift for each instance
+    replicator.instanceBlueOffset = -0.1;
+    replicator.instanceGreenOffset = -0.1;
+
+    //create a sublayer and place it inside the replicator
+    CALayer *layer = [CALayer layer];
+    layer.frame = CGRectMake(100.0f, 100.0f, 100.0f, 100.0f);
+    layer.backgroundColor = [UIColor whiteColor].CGColor;
+    [replicator addSublayer:layer];
+}
+@end
+</code></pre><p>带倒影效果的VIew示例代码：</p>
+<pre><code>#import &quot;ReflectionView.h&quot;
+
+@implementation ReflectionView
+
++ (Class)layerClass
+{
+    return [CAReplicatorLayer class];
+}
+
+- (void)setUp
+{
+    //configure replicator
+    CAReplicatorLayer *layer = (CAReplicatorLayer *)self.layer;
+    layer.instanceCount = 2;
+
+    //move reflection instance below original and flip vertically
+    CATransform3D transform = CATransform3DIdentity;
+    CGFloat verticalOffset = self.bounds.size.height + 2;
+    transform = CATransform3DTranslate(transform, 0, verticalOffset, 0);
+    transform = CATransform3DScale(transform, 1, -1, 0);
+    layer.instanceTransform = transform;
+
+    //reduce alpha of reflection layer
+    layer.instanceAlphaOffset = -0.6;
+}
+￼
+- (id)initWithFrame:(CGRect)frame
+{
+    //this is called when view is created in code
+    if ((self = [super initWithFrame:frame])) {
+        [self setUp];
+    }
+    return self;
+}
+
+- (void)awakeFromNib
+{
+    //this is called when view is created from a nib
+    [self setUp];
+}
+@end
+</code></pre><h3 id="CAScrollLayer"><a href="#CAScrollLayer" class="headerlink" title="CAScrollLayer"></a>CAScrollLayer</h3><p>自动适应图层的bounds使图层上指定点得内容出现在图层原点：</p>
+<pre><code>[(CAScrollLayer *)self.layer scrollToPoint:offset];
+</code></pre><p>从图层树中查找并找到第一个可用的CAScrollLayer，然后滑动它使得指定点/矩形区域成为可视的：</p>
+<pre><code>- (void)scrollPoint:(CGPoint)point;
+- (void)scrollRectToVisible:(CGRect)rect;
+</code></pre><p>通过<code>CAScrollLayer</code>实现滑动视图代码清单：</p>
+<pre><code>#import &quot;ScrollView.h&quot;
+@implementation ScrollView
++ (Class)layerClass
+{
+    return [CAScrollLayer class];
+}
+
+- (void)setUp
+{
+    //enable clipping
+    self.layer.masksToBounds = YES;
+
+    //attach pan gesture recognizer
+    UIPanGestureRecognizer *recognizer = nil;
+    recognizer = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)];
+    [self addGestureRecognizer:recognizer];
+}
+
+- (id)initWithFrame:(CGRect)frame
+{
+    //this is called when view is created in code
+    if ((self = [super initWithFrame:frame])) {
+        [self setUp];
+    }
+    return self;
+}
+
+- (void)awakeFromNib {
+    //this is called when view is created from a nib
+    [self setUp];
+}
+
+- (void)pan:(UIPanGestureRecognizer *)recognizer
+{
+    //get the offset by subtracting the pan gesture
+    //translation from the current bounds origin
+    CGPoint offset = self.bounds.origin;
+    offset.x -= [recognizer translationInView:self].x;
+    offset.y -= [recognizer translationInView:self].y;
+
+    //scroll the layer
+    [(CAScrollLayer *)self.layer scrollToPoint:offset];
+
+    //reset the pan gesture translation
+    [recognizer setTranslation:CGPointZero inView:self];
+}
+@end
+</code></pre><h3 id="AVPlayerLayer"><a href="#AVPlayerLayer" class="headerlink" title="AVPlayerLayer"></a>AVPlayerLayer</h3><p>示例代码：</p>
+<pre><code>- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    //get video URL
+    NSURL *URL = [[NSBundle mainBundle] URLForResource:@&quot;Ship&quot; withExtension:@&quot;mp4&quot;];
+
+    //create player and player layer
+    AVPlayer *player = [AVPlayer playerWithURL:URL];
+    AVPlayerLayer *playerLayer = [AVPlayerLayer playerLayerWithPlayer:player];
+
+    //set player layer frame and attach it to our view
+    playerLayer.frame = self.containerView.bounds;
+    [self.containerView.layer addSublayer:playerLayer];
+
+    //play the video
+    [player play];
+}
+</code></pre><p>给视频增加变换，边框和圆角，示例代码：</p>
+<pre><code>- (void)viewDidLoad
+{
+    ...
+    //set player layer frame and attach it to our view
+    playerLayer.frame = self.containerView.bounds;
+    [self.containerView.layer addSublayer:playerLayer];
+
+    //transform layer
+    CATransform3D transform = CATransform3DIdentity;
+    transform.m34 = -1.0 / 500.0;
+    transform = CATransform3DRotate(transform, M_PI_4, 1, 1, 0);
+    playerLayer.transform = transform;
+    ￼
+    //add rounded corners and border
+    playerLayer.masksToBounds = YES;
+    playerLayer.cornerRadius = 20.0;
+    playerLayer.borderColor = [UIColor redColor].CGColor;
+    playerLayer.borderWidth = 5.0;
+
+    //play the video
+    [player play];
+}
+</code></pre>
+      
+    </div>
+    <footer class="article-footer">
+      
+        <a data-url="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/" data-id="cimofno3a0007jmsxqrt5gs9a" class="article-share-link" data-share="baidu" data-title="iOS Core Animation Advanced Techniques学习笔记（3）">分享到</a>
+      
+
+      
+        <a href="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/#ds-thread" class="article-comment-link">文章评论</a>
+      
+
+      
+  <ul class="article-tag-list"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Core-Animation/">Core Animation</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（4）/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          iOS Core Animation Advanced Techniques学习笔记（4）
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（1）/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">iOS Core Animation Advanced Techniques学习笔记（1）</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+  <section id="comments">
+    <div id="ds-thread" class="ds-thread" data-thread-key="2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/" data-title="iOS Core Animation Advanced Techniques学习笔记（3）" data-url="http://helly1024.github.io/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/"></div>
+  </section>
+</section>
+      
+      <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/学习笔记/">学习笔记</a><span class="category-list-count">5</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/源码阅读/">源码阅读</a><span class="category-list-count">2</span></li></ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list"><li class="tag-list-item"><a class="tag-list-link" href="/tags/AutoreleasePool/">AutoreleasePool</a><span class="tag-list-count">1</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Core-Animation/">Core Animation</a><span class="tag-list-count">5</span></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JSON解析/">JSON解析</a><span class="tag-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/04/">四月 2016</a><span class="archive-list-count">1</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/08/">八月 2015</a><span class="archive-list-count">5</span></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/03/">三月 2015</a><span class="archive-list-count">1</span></li></ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">近期文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2016/04/05/AutoreleasePool的原理和实现/">AutoreleasePool的原理和实现</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（5）/">iOS Core Animation Advanced Techniques学习笔记（5）</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（2）/">iOS Core Animation Advanced Techniques学习笔记（2）</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（4）/">iOS Core Animation Advanced Techniques学习笔记（4）</a>
+          </li>
+        
+          <li>
+            <a href="/2015/08/10/iOS Core Animation Advanced Techniques学习笔记（3）/">iOS Core Animation Advanced Techniques学习笔记（3）</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+      
+    </div>
+    <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      &copy; 2016 Helly<br>
+      Powered by <a href="http://hexo.io/" target="_blank">Hexo</a>
+      .
+      Theme by <a href="https://github.com/xiangming/landscape-plus" target="_blank">Landscape-plus</a>
+    </div>
+  </div>
+</footer>
+  </div>
+  <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">首页</a>
+  
+    <a href="/archives" class="mobile-nav-link">归档</a>
+  
+</nav>
+  <!-- totop start -->
+<div id="totop">
+<a title="返回顶部"><img src="/img/scrollup.png"/></a>
+</div>
+
+<!-- totop end -->
+
+<<!-- 多说公共JS代码 start (一个网页只需插入一次) -->
+<script type="text/javascript">
+var duoshuoQuery = {short_name:"helly1024"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+     || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+  </script>
+<!-- 多说公共JS代码 end -->
+
+
+<!-- 百度分享 start -->
+
+<div id="article-share-box" class="article-share-box">
+  <div id="bdshare" class="bdsharebuttonbox article-share-links">
+    <a class="article-share-weibo" data-cmd="tsina" title="分享到新浪微博"></a>
+    <a class="article-share-weixin" data-cmd="weixin" title="分享到微信"></a>
+    <a class="article-share-qq" data-cmd="sqq" title="分享到QQ"></a>
+    <a class="article-share-renren" data-cmd="renren" title="分享到人人网"></a>
+    <a class="article-share-more" data-cmd="more" title="更多"></a>
+  </div>
+</div>
+<script>
+  function SetShareData(cmd, config) {
+    if (shareDataTitle && shareDataUrl) {
+      config.bdText = shareDataTitle;
+      config.bdUrl = shareDataUrl;
+    }
+    return config;
+  }
+  window._bd_share_config={
+    "common":{onBeforeClick: SetShareData},
+    "share":{"bdCustomStyle":"/css/bdshare.css"}
+  };
+  with(document)0[(getElementsByTagName('head')[0]||body).appendChild(createElement('script')).src='http://bdimg.share.baidu.com/static/api/js/share.js?cdnversion='+~(-new Date()/36e5)];
+</script>
+
+<!-- 百度分享 end -->
+
+<script src="//cdnjs.cloudflare.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+
+
+  <link rel="stylesheet" href="/fancybox/jquery.fancybox.css">
+  <script src="/fancybox/jquery.fancybox.pack.js"></script>
+
+
+
+<script src="/js/script.js"></script>
+
+</div>
+</body>
+</html>
